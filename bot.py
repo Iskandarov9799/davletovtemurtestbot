@@ -9,6 +9,7 @@ from config import config
 from database.db import init_db
 from database.questions_data import seed_questions
 from handlers import registration, payment, test_handler, admin
+from keep_alive import start_web_server
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,20 +20,19 @@ logger = logging.getLogger(__name__)
 async def main():
     logger.info("🚀 Bot ishga tushmoqda...")
 
-    # Init database
     init_db()
     seed_questions()
 
-    # Create bot
+    # Render uchun web server parallel ishlatiladi
+    await start_web_server()
+
     bot = Bot(
         token=config.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 
-    # Create dispatcher with FSM storage
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Register routers (tartib muhim!)
     dp.include_router(registration.router)
     dp.include_router(payment.router)
     dp.include_router(test_handler.router)
@@ -44,7 +44,6 @@ async def main():
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         await bot.session.close()
-        logger.info("🛑 Bot to'xtatildi.")
 
 if __name__ == "__main__":
     asyncio.run(main())
