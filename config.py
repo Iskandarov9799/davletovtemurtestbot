@@ -15,7 +15,7 @@ class Config:
     PAYMENT_CARD_OWNER: str = "Qudrat Iskandarov"
 
     # Mini App URL (deploy qilingandan keyin o'zgartiring)
-    MINI_APP_URL: str = "https://Iskandarov9799.github.io/ona-tili-bot/miniapp/"
+    MINI_APP_URL: str = "https://iskandarov9799.github.io/davletovtemurtestbot/miniapp/"
 
     # Database
     DB_PATH: str = "database/bot.db"

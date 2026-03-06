@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from config import config
 from database.db import init_db
 from database.questions_data import seed_questions
-from handlers import registration, payment, test_handler, admin, question_editor
+from handlers import registration, payment, miniapp_handler, admin, question_editor
 from keep_alive import start_web_server
 
 logging.basicConfig(
@@ -35,7 +35,7 @@ async def main():
 
     dp.include_router(registration.router)
     dp.include_router(payment.router)
-    dp.include_router(test_handler.router)
+    dp.include_router(miniapp_handler.router)
     dp.include_router(admin.router)
     dp.include_router(question_editor.router)
 
