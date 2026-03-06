@@ -23,6 +23,6 @@ class Config:
     def __post_init__(self):
         if self.ADMIN_IDS is None:
             # Admin Telegram ID larini shu yerga qo'shing
-            self.ADMIN_IDS = [969814328]  # O'z admin ID ingizni kiriting
+            self.ADMIN_IDS = [969814328, 861992664]  # O'z admin ID ingizni kiriting
 
 config = Config()
