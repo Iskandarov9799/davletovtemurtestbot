@@ -1,13 +1,11 @@
-BOT_TOKEN = "8654058818:AAEkGzqVqqGnshIFYstsEw9431x7CKEmp9Q"
-ADMIN_IDS = [969814328]
-PAYMENT_CARD_NUMBER = "9860350144067617"
+
 
 import os
 from dataclasses import dataclass
 
 @dataclass
 class Config:
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "8654058818:AAEkGzqVqqGnshIFYstsEw9431x7CKEmp9Q")
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN")
     ADMIN_IDS: list = None
 
     # Payment settings
