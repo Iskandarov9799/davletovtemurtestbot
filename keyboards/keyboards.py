@@ -6,96 +6,85 @@ from aiogram.types import (
 # ============ REPLY KEYBOARDS ============
 
 def phone_keyboard():
-    """Telefon raqamini ulashish tugmasi"""
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📱 Telefon raqamimni ulashish", request_contact=True)]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
+        keyboard=[[KeyboardButton(text="📱 Telefon raqamimni ulashish", request_contact=True)]],
+        resize_keyboard=True, one_time_keyboard=True
     )
 
-def main_menu_keyboard(is_paid: bool = False):
-    """Asosiy menyu"""
+def main_menu_keyboard(is_paid=False):
     buttons = []
-
     if is_paid:
         buttons.append([KeyboardButton(text="📝 Testni boshlash")])
-        buttons.append([KeyboardButton(text="📊 Mening natijalarim")])
+        buttons.append([KeyboardButton(text="📊 Mening natijalarim"), KeyboardButton(text="🏆 Reyting")])
     else:
         buttons.append([KeyboardButton(text="💳 To'lov qilish")])
-
     buttons.append([KeyboardButton(text="ℹ️ Ma'lumot")])
-
-    return ReplyKeyboardMarkup(
-        keyboard=buttons,
-        resize_keyboard=True
-    )
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 def cancel_keyboard():
-    """Bekor qilish tugmasi"""
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="❌ Bekor qilish")]],
-        resize_keyboard=True,
-        one_time_keyboard=True
+        resize_keyboard=True, one_time_keyboard=True
     )
 
 def admin_keyboard():
-    """Admin panel klaviaturasi"""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="💰 Kutayotgan to'lovlar")],
-            [KeyboardButton(text="👥 Barcha foydalanuvchilar")],
-            [KeyboardButton(text="📊 Statistika")],
+            [KeyboardButton(text="👥 Foydalanuvchilar"), KeyboardButton(text="📊 Statistika")],
+            [KeyboardButton(text="📢 Broadcast"), KeyboardButton(text="➕ Savol qo'shish")],
+            [KeyboardButton(text="📋 Savollar"), KeyboardButton(text="📥 Excel eksport")],
             [KeyboardButton(text="🔙 Orqaga")]
         ],
         resize_keyboard=True
     )
 
+def skip_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="⏭ Rasmisiz davom etish")],
+                  [KeyboardButton(text="❌ Bekor qilish")]],
+        resize_keyboard=True
+    )
+
 # ============ INLINE KEYBOARDS ============
 
-def payment_confirm_keyboard(telegram_id: int):
-    """Admin uchun to'lovni tasdiqlash/rad etish"""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Tasdiqlash",
-                    callback_data=f"confirm_pay:{telegram_id}"
-                ),
-                InlineKeyboardButton(
-                    text="❌ Rad etish",
-                    callback_data=f"reject_pay:{telegram_id}"
-                )
-            ]
-        ]
-    )
+def difficulty_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🟢 Oson", callback_data="diff:easy"),
+            InlineKeyboardButton(text="🟡 O'rta", callback_data="diff:medium"),
+            InlineKeyboardButton(text="🔴 Qiyin", callback_data="diff:hard"),
+        ],
+        [InlineKeyboardButton(text="🎲 Aralash", callback_data="diff:mixed")]
+    ])
 
-def test_answer_keyboard(question_index: int):
-    """Test javob variantlari"""
-    options = [
-        ("A", f"answer:{question_index}:A"),
-        ("B", f"answer:{question_index}:B"),
-        ("C", f"answer:{question_index}:C"),
-        ("D", f"answer:{question_index}:D"),
-    ]
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🅰 A", callback_data=options[0][1]),
-                InlineKeyboardButton(text="🅱 B", callback_data=options[1][1]),
-            ],
-            [
-                InlineKeyboardButton(text="🅲 C", callback_data=options[2][1]),
-                InlineKeyboardButton(text="🅳 D", callback_data=options[3][1]),
-            ]
+def payment_confirm_keyboard(telegram_id):
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"confirm_pay:{telegram_id}"),
+        InlineKeyboardButton(text="❌ Rad etish", callback_data=f"reject_pay:{telegram_id}")
+    ]])
+
+def test_answer_keyboard(q_index):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🅰 A", callback_data=f"answer:{q_index}:A"),
+            InlineKeyboardButton(text="🅱 B", callback_data=f"answer:{q_index}:B"),
+        ],
+        [
+            InlineKeyboardButton(text="🅲 C", callback_data=f"answer:{q_index}:C"),
+            InlineKeyboardButton(text="🅳 D", callback_data=f"answer:{q_index}:D"),
         ]
-    )
+    ])
 
 def start_test_keyboard():
-    """Test boshlash tugmasi"""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Testni boshlash!", callback_data="start_test")]
-        ]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚀 Testni boshlash!", callback_data="start_test")]
+    ])
+
+def correct_answer_keyboard(q_index):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="A", callback_data=f"setcorrect:{q_index}:A"),
+         InlineKeyboardButton(text="B", callback_data=f"setcorrect:{q_index}:B"),
+         InlineKeyboardButton(text="C", callback_data=f"setcorrect:{q_index}:C"),
+         InlineKeyboardButton(text="D", callback_data=f"setcorrect:{q_index}:D")]
+    ])

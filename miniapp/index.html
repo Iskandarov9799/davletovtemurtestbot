@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Test</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+  :root {
+    --bg: #0f0f1a; --card: #1a1a2e; --accent: #6c63ff;
+    --correct: #22c55e; --wrong: #ef4444; --skip: #f59e0b;
+    --text: #f0f0ff; --muted: #6b6b8a; --border: #2a2a40;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { font-family:'Nunito',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+  .header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px 12px; position:sticky; top:0; background:var(--bg); z-index:10; border-bottom:1px solid var(--border); }
+  .header-title { font-size:17px; font-weight:800; }
+  .header-score { background:var(--accent); padding:4px 12px; border-radius:20px; font-size:13px; font-weight:700; }
+
+  .progress-wrap { padding:10px 20px; }
+  .progress-bar { height:5px; background:var(--border); border-radius:10px; overflow:hidden; }
+  .progress-fill { height:100%; background:linear-gradient(90deg,var(--accent),#a78bfa); border-radius:10px; transition:width 0.4s ease; }
+  .progress-text { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:5px; }
+
+  .question-section { padding:16px 20px; }
+  .question-img { width:100%; border-radius:12px; margin-bottom:14px; max-height:180px; object-fit:cover; }
+  .question-num { font-size:12px; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+  .question-text { font-size:17px; font-weight:700; line-height:1.5; }
+
+  .options { padding:0 20px 16px; display:flex; flex-direction:column; gap:10px; }
+  .option { display:flex; align-items:center; gap:12px; padding:14px 16px; background:var(--card); border:2px solid var(--border); border-radius:14px; cursor:pointer; transition:all 0.2s; user-select:none; }
+  .option:active { transform:scale(0.98); }
+  .option-label { width:32px; height:32px; border-radius:10px; background:var(--border); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; flex-shrink:0; transition:all 0.2s; }
+  .option-text { font-size:15px; font-weight:600; line-height:1.4; }
+
+  .option.correct { border-color:var(--correct); background:rgba(34,197,94,0.12); animation:pulse 0.4s ease; }
+  .option.correct .option-label { background:var(--correct); color:white; }
+  .option.wrong { border-color:var(--wrong); background:rgba(239,68,68,0.12); animation:shake 0.4s ease; }
+  .option.wrong .option-label { background:var(--wrong); color:white; }
+  .option.show-correct { border-color:var(--correct); background:rgba(34,197,94,0.08); }
+  .option.show-correct .option-label { background:var(--correct); color:white; }
+  .option.disabled { pointer-events:none; opacity:0.55; }
+  .option.disabled.correct,.option.disabled.wrong,.option.disabled.show-correct { opacity:1; }
+
+  @keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(1.02)} 100%{transform:scale(1)} }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+
+  .feedback { margin:0 20px 12px; padding:12px 16px; border-radius:12px; font-size:14px; font-weight:700; display:none; align-items:center; gap:8px; }
+  .feedback.correct-fb { background:rgba(34,197,94,0.15); color:var(--correct); display:flex; }
+  .feedback.wrong-fb { background:rgba(239,68,68,0.15); color:var(--wrong); display:flex; }
+
+  .actions { padding:0 20px 16px; display:flex; gap:10px; }
+  .btn { flex:1; padding:14px; border:none; border-radius:14px; font-family:'Nunito',sans-serif; font-size:15px; font-weight:800; cursor:pointer; transition:all 0.2s; }
+  .btn:active { transform:scale(0.97); }
+  .btn-skip { background:var(--card); color:var(--skip); border:2px solid var(--skip); flex:0 0 auto; padding:14px 20px; }
+  .btn-next { background:linear-gradient(135deg,var(--accent),#a78bfa); color:white; display:none; }
+  .btn-finish { background:linear-gradient(135deg,#22c55e,#16a34a); color:white; display:none; }
+
+  .grid-section { padding:12px 20px 100px; border-top:1px solid var(--border); }
+  .grid-label { font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; }
+  .grid { display:flex; flex-wrap:wrap; gap:8px; }
+  .grid-btn { width:38px; height:38px; border-radius:10px; border:2px solid var(--border); background:var(--card); color:var(--muted); font-family:'Nunito',sans-serif; font-size:13px; font-weight:800; cursor:pointer; transition:all 0.2s; }
+  .grid-btn.current { border-color:var(--accent); color:var(--accent); background:rgba(108,99,255,0.15); }
+  .grid-btn.g-correct { background:var(--correct); border-color:var(--correct); color:white; }
+  .grid-btn.g-wrong { background:var(--wrong); border-color:var(--wrong); color:white; }
+  .grid-btn.g-skip { background:var(--skip); border-color:var(--skip); color:white; }
+
+  #result-screen { display:none; padding:30px 20px 40px; text-align:center; flex-direction:column; align-items:center; }
+  .result-emoji { font-size:64px; margin-bottom:12px; animation:bounceIn 0.5s ease; }
+  @keyframes bounceIn { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+  .result-title { font-size:24px; font-weight:900; margin-bottom:6px; }
+  .result-score { font-size:56px; font-weight:900; background:linear-gradient(135deg,var(--accent),#a78bfa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin:8px 0 20px; }
+  .result-stats { display:flex; gap:12px; width:100%; margin-bottom:20px; }
+  .stat-card { flex:1; background:var(--card); border-radius:16px; padding:16px; border:2px solid var(--border); }
+  .stat-val { font-size:28px; font-weight:900; }
+  .stat-label { font-size:11px; color:var(--muted); font-weight:700; margin-top:4px; }
+  .stat-c .stat-val { color:var(--correct); }
+  .stat-w .stat-val { color:var(--wrong); }
+  .stat-s .stat-val { color:var(--skip); }
+  .result-grid-box { width:100%; background:var(--card); border-radius:16px; padding:16px; margin-bottom:20px; border:2px solid var(--border); text-align:left; }
+  .result-grid-title { font-size:13px; color:var(--muted); font-weight:700; margin-bottom:10px; }
+  .btn-send { width:100%; padding:16px; background:linear-gradient(135deg,var(--accent),#a78bfa); color:white; border:none; border-radius:16px; font-family:'Nunito',sans-serif; font-size:16px; font-weight:900; cursor:pointer; transition:all 0.2s; }
+  .btn-send:active { transform:scale(0.98); }
+</style>
+</head>
+<body>
+
+<div id="test-screen">
+  <div class="header">
+    <div class="header-title">📚 Ona tili testi</div>
+    <div class="header-score" id="score-badge">0 ball</div>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:3%"></div></div>
+    <div class="progress-text"><span id="progress-label">1 / 30</span><span id="q-counter"></span></div>
+  </div>
+  <div class="question-section">
+    <img id="question-img" class="question-img" style="display:none">
+    <div class="question-num" id="question-num">SAVOL 1</div>
+    <div class="question-text" id="question-text">Yuklanmoqda...</div>
+  </div>
+  <div class="options" id="options"></div>
+  <div class="feedback" id="feedback"></div>
+  <div class="actions">
+    <button class="btn btn-skip" id="btn-skip" onclick="skipQuestion()">⏭ O'tkazish</button>
+    <button class="btn btn-next" id="btn-next" onclick="nextQuestion()">Keyingi Savol →</button>
+    <button class="btn btn-finish" id="btn-finish" onclick="showResult()">✅ Tugatish</button>
+  </div>
+  <div class="grid-section">
+    <div class="grid-label">Savollar paneli</div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<div id="result-screen">
+  <div class="result-emoji" id="result-emoji">🏆</div>
+  <div class="result-title" id="result-title">Ajoyib!</div>
+  <div class="result-score" id="result-score">0%</div>
+  <div class="result-stats">
+    <div class="stat-card stat-c"><div class="stat-val" id="r-correct">0</div><div class="stat-label">✅ To'g'ri</div></div>
+    <div class="stat-card stat-w"><div class="stat-val" id="r-wrong">0</div><div class="stat-label">❌ Xato</div></div>
+    <div class="stat-card stat-s"><div class="stat-val" id="r-skip">0</div><div class="stat-label">⏭ O'tkazildi</div></div>
+  </div>
+  <div class="result-grid-box">
+    <div class="result-grid-title">Har bir savol natijasi:</div>
+    <div class="grid" id="result-grid"></div>
+  </div>
+  <button class="btn-send" onclick="sendResult()">📤 Natijani yuborish</button>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+let questions = [], current = 0, answers = [], score = 0, answered = false;
+
+const DEMO = [
+  {id:1,text:"Fe'lning necha zamonlari bor?",a:"2 ta",b:"3 ta",c:"4 ta",d:"5 ta",correct:"B",img:null},
+  {id:2,text:"Qaysi so'z olmosh turkumiga kiradi?",a:"kitob",b:"men",c:"yaxshi",d:"yugurmoq",correct:"B",img:null},
+  {id:3,text:"Sinonimlarga misol keltiring:",a:"katta–kichik",b:"yaxshi–yomon",c:"baland–past",d:"go'zal–chiroyli",correct:"D",img:null},
+  {id:4,text:"O'zbek tilida unli tovushlar soni nechta?",a:"5",b:"6",c:"7",d:"8",correct:"B",img:null},
+  {id:5,text:"Ko'plik qo'shimchasi qaysi?",a:"-ning",b:"-lar",c:"-ga",d:"-dan",correct:"B",img:null},
+  {id:6,text:"Antonim nima?",a:"Ma'nodosh so'zlar",b:"Qarama-qarshi ma'noli so'zlar",c:"Shakldosh so'zlar",d:"Ko'p ma'noli so'zlar",correct:"B",img:null},
+  {id:7,text:"Navoiyning Xamsa'si nechta dostondan iborat?",a:"3",b:"4",c:"5",d:"6",correct:"C",img:null},
+  {id:8,text:"Ruboiy necha misradan iborat?",a:"2",b:"4",c:"6",d:"8",correct:"B",img:null},
+  {id:9,text:"O'tkan kunlar romanini kim yozgan?",a:"Hamza",b:"Cho'lpon",c:"Abdulla Qodiriy",d:"G'afur G'ulom",correct:"C",img:null},
+  {id:10,text:"Ega qanday so'roqqa javob beradi?",a:"Nima? Qaysi?",b:"Kim? Nima?",c:"Qachon? Qayerda?",d:"Qanday? Qancha?",correct:"B",img:null},
+];
+
+window.addEventListener('message', e => {
+  try { const d = JSON.parse(e.data); if (d.type==='questions') { questions=d.questions; initTest(); } } catch {}
+});
+
+function initTest() {
+  if (!questions.length) questions = DEMO;
+  answers = new Array(questions.length).fill(null);
+  buildGrid();
+  renderQuestion(0);
+}
+
+function buildGrid() {
+  const g = document.getElementById('grid');
+  g.innerHTML = '';
+  questions.forEach((_, i) => {
+    const b = document.createElement('button');
+    b.className = 'grid-btn' + (i===0?' current':'');
+    b.id = 'gb-'+i;
+    b.textContent = i+1;
+    b.onclick = () => { if (answers[i]===null) { current=i; renderQuestion(i); } };
+    g.appendChild(b);
+  });
+}
+
+function updateGrid() {
+  questions.forEach((_, i) => {
+    const b = document.getElementById('gb-'+i);
+    if (!b) return;
+    b.className = 'grid-btn';
+    if (i===current) b.classList.add('current');
+    else if (answers[i]==='correct') b.classList.add('g-correct');
+    else if (answers[i]==='wrong') b.classList.add('g-wrong');
+    else if (answers[i]==='skip') b.classList.add('g-skip');
+  });
+}
+
+function renderQuestion(i) {
+  answered = false;
+  const q = questions[i];
+  const total = questions.length;
+  document.getElementById('question-num').textContent = 'SAVOL ' + (i+1);
+  document.getElementById('question-text').textContent = q.text || q.question_text;
+  document.getElementById('progress-label').textContent = (i+1) + ' / ' + total;
+  document.getElementById('progress-fill').style.width = ((i+1)/total*100) + '%';
+  document.getElementById('score-badge').textContent = score + ' ball';
+  const img = document.getElementById('question-img');
+  if (q.img || q.image_file_id) { img.src = q.img||q.image_file_id; img.style.display='block'; }
+  else img.style.display='none';
+  const opts = document.getElementById('options');
+  opts.innerHTML = '';
+  ['A','B','C','D'].forEach((lbl, idx) => {
+    const texts = [q.a||q.option_a, q.b||q.option_b, q.c||q.option_c, q.d||q.option_d];
+    const div = document.createElement('div');
+    div.className = 'option';
+    div.id = 'opt-'+lbl;
+    div.innerHTML = '<div class="option-label">'+lbl+'</div><div class="option-text">'+texts[idx]+'</div>';
+    div.onclick = () => selectOption(lbl);
+    opts.appendChild(div);
+  });
+  const fb = document.getElementById('feedback');
+  fb.className = 'feedback'; fb.style.display='none';
+  document.getElementById('btn-skip').style.display='block';
+  document.getElementById('btn-next').style.display='none';
+  document.getElementById('btn-finish').style.display='none';
+  updateGrid();
+}
+
+function selectOption(label) {
+  if (answered) return;
+  answered = true;
+  const q = questions[current];
+  const correct = q.correct || q.correct_answer;
+  const isCorrect = label === correct;
+  document.querySelectorAll('.option').forEach(o => o.classList.add('disabled'));
+  document.getElementById('opt-'+label).classList.add(isCorrect?'correct':'wrong');
+  if (!isCorrect) document.getElementById('opt-'+correct).classList.add('show-correct');
+  answers[current] = isCorrect ? 'correct' : 'wrong';
+  if (isCorrect) score++;
+  document.getElementById('score-badge').textContent = score + ' ball';
+  const fb = document.getElementById('feedback');
+  const optTexts = {A:q.a||q.option_a,B:q.b||q.option_b,C:q.c||q.option_c,D:q.d||q.option_d};
+  if (isCorrect) {
+    fb.className='feedback correct-fb';
+    fb.innerHTML='✅ To\'g\'ri javob!';
+  } else {
+    fb.className='feedback wrong-fb';
+    fb.innerHTML='❌ Noto\'g\'ri! To\'g\'ri: <b>'+correct+') '+optTexts[correct]+'</b>';
+  }
+  document.getElementById('btn-skip').style.display='none';
+  const isLast = current===questions.length-1;
+  document.getElementById(isLast?'btn-finish':'btn-next').style.display='block';
+  updateGrid();
+  if (tg) tg.HapticFeedback?.impactOccurred(isCorrect?'medium':'heavy');
+}
+
+function skipQuestion() {
+  answers[current] = 'skip';
+  updateGrid();
+  let next = current + 1;
+  while (next < questions.length && answers[next] !== null) next++;
+  if (next < questions.length) { current=next; renderQuestion(current); }
+  else showResult();
+}
+
+function nextQuestion() {
+  let next = current + 1;
+  while (next < questions.length && answers[next] !== null) next++;
+  if (next < questions.length) { current=next; renderQuestion(current); }
+  else showResult();
+}
+
+function showResult() {
+  const total = questions.length;
+  const correct = answers.filter(a=>a==='correct').length;
+  const wrong = answers.filter(a=>a==='wrong').length;
+  const skip = answers.filter(a=>a==='skip' || a===null).length;
+  const pct = Math.round(correct/total*100);
+  document.getElementById('test-screen').style.display='none';
+  const rs = document.getElementById('result-screen');
+  rs.style.display='flex';
+  const configs = [
+    [90,'🏆','Mukammal natija!'],[70,'🎉','Yaxshi natija!'],[50,'📚','Qoniqarli natija'],[0,'😔','Ko\'proq mashq kerak']
+  ];
+  const [,emoji,title] = configs.find(([min])=>pct>=min);
+  document.getElementById('result-emoji').textContent=emoji;
+  document.getElementById('result-title').textContent=title;
+  document.getElementById('result-score').textContent=pct+'%';
+  document.getElementById('r-correct').textContent=correct;
+  document.getElementById('r-wrong').textContent=wrong;
+  document.getElementById('r-skip').textContent=skip;
+  const rg = document.getElementById('result-grid');
+  rg.innerHTML='';
+  answers.forEach((a,i) => {
+    const d = document.createElement('div');
+    const colors = {correct:'#22c55e',wrong:'#ef4444',skip:'#f59e0b'};
+    const bg = colors[a] || '#2a2a40';
+    const clr = a ? 'white' : '#6b6b8a';
+    d.style.cssText=`width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:${bg};color:${clr}`;
+    d.textContent=i+1;
+    rg.appendChild(d);
+  });
+}
+
+function sendResult() {
+  const total=questions.length;
+  const correct=answers.filter(a=>a==='correct').length;
+  const wrong=answers.filter(a=>a==='wrong').length;
+  const skip=answers.filter(a=>a==='skip'||a===null).length;
+  const pct=Math.round(correct/total*100);
+  const data=JSON.stringify({correct,wrong,skip,total,score:pct,answers});
+  if (tg) tg.sendData(data);
+  else alert('Natija: '+pct+'%');
+}
+
+initTest();
+</script>
+</body>
+</html>
