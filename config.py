@@ -1,28 +1,73 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from dotenv import load_dotenv
+
+load_dotenv()
 
 @dataclass
 class Config:
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN")
-    ADMIN_IDS: list = None
+    # ── .env dan o'qiladi ───────────────────────────
+    BOT_TOKEN:     str  = field(default_factory=lambda: os.getenv("BOT_TOKEN", ""))
+    DATABASE_URL:  str  = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
+    MINI_APP_URL:  str  = field(default_factory=lambda: os.getenv("MINI_APP_URL", ""))
+    ADMIN_IDS:     list = field(default_factory=lambda: [
+        int(x)
+        for x in os.getenv("ADMIN_IDS", "")
+                   .strip().strip("[]").replace(" ", "").split(",")
+        if x.strip().lstrip("-").isdigit()
+    ])
+    PAYMENT_CARD:  str  = field(default_factory=lambda: os.getenv("PAYMENT_CARD",  "8600 0000 0000 0000"))
+    PAYMENT_OWNER: str  = field(default_factory=lambda: os.getenv("PAYMENT_OWNER", "Karta egasi"))
 
-    # Payment settings
-    PAYMENT_AMOUNT: int = 15000  # So'm
-    PAYMENT_CARD_NUMBER: str = "9860 3501 4406 7617"
-    PAYMENT_CARD_OWNER: str = "Qudrat Iskandarov"
+    # ── Narxlar (so'm) ──────────────────────────────
+    PRICE_RETRY:       int = 5_000
+    PRICE_ATTESTATION: int = 15_000
 
-    # Mini App URL (deploy qilingandan keyin o'zgartiring)
-    MINI_APP_URL: str = "https://iskandarov9799.github.io/davletovtemurtestbot/miniapp/"
+    # ── Test sozlamalari ────────────────────────────
+    MIN_QUESTIONS:     int = 35
+    ATTESTATION_COUNT: int = 35
 
-    # Database
-    DB_PATH: str = "database/bot.db"
+    # ── Fanlar ─────────────────────────────────────
+    SUBJECTS = {
+        'onatili':  '📚 Ona tili',
+        'adabiyot': '📖 Adabiyot',
+    }
 
-    def __post_init__(self):
-        if self.ADMIN_IDS is None:
-            # Admin Telegram ID larini shu yerga qo'shing
-            self.ADMIN_IDS = [969814328, 861992664]  # O'z admin ID ingizni kiriting
+    ONA_TILI_TOPICS = {
+        'fonetika':    '🔤 Fonetika',
+        'leksika':     '📝 Leksikologiya',
+        'morfologiya': '🔠 Morfologiya',
+        'sintaksis':   '📐 Sintaksis',
+        'imlo':        '✏️ Imlo',
+        'uslubiyat':   '🎨 Uslubiyat',
+    }
+
+    GRADES = {
+        '5': '5-sinf', '6': '6-sinf',  '7': '7-sinf',
+        '8': '8-sinf', '9': '9-sinf', '10': '10-sinf', '11': '11-sinf',
+    }
+
+    DIFFICULTIES = {
+        'easy':   '🟢 Oson',
+        'medium': "🟡 O'rta",
+        'hard':   '🔴 Qiyin',
+    }
+
+    def validate(self):
+        """Bot ishga tushishdan oldin majburiy sozlamalarni tekshirish"""
+        errors = []
+        if not self.BOT_TOKEN:
+            errors.append("❌ BOT_TOKEN — .env faylida yo'q!")
+        if not self.DATABASE_URL:
+            errors.append("❌ DATABASE_URL — .env faylida yo'q!")
+        if not self.ADMIN_IDS:
+            errors.append("❌ ADMIN_IDS — .env faylida yo'q!")
+        if not self.MINI_APP_URL:
+            errors.append("⚠️  MINI_APP_URL — .env faylida yo'q (mini app ishlamaydi)")
+        if errors:
+            for e in errors:
+                print(e)
+            if any("❌" in e for e in errors):
+                raise SystemExit("Bot ishga tushmadi — .env ni to'ldiring!")
 
 config = Config()

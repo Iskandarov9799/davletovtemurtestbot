@@ -1,363 +1,406 @@
-import sqlite3
-import os
+"""
+Barcha database operatsiyalari — async SQLAlchemy orqali.
+"""
 from datetime import datetime
+from sqlalchemy import select, update, delete, func
+from sqlalchemy.orm import selectinload
 
-DB_PATH = "database/bot.db"
+from database.models import (
+    User, Purchase, UserAccess, AttestationAccess,
+    Question, TestResult
+)
+from database.connection import AsyncSessionLocal
 
-def get_connection():
-    os.makedirs("database", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# ──────────────────────────────────────────────
+# USERS
+# ──────────────────────────────────────────────
 
-def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.executescript("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER UNIQUE NOT NULL,
-            phone_number TEXT,
-            full_name TEXT,
-            username TEXT,
-            is_registered INTEGER DEFAULT 0,
-            is_paid INTEGER DEFAULT 0,
-            payment_confirmed INTEGER DEFAULT 0,
-            registered_at TEXT,
-            paid_at TEXT
-        );
+async def get_user(telegram_id: int):
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(select(User).where(User.telegram_id == telegram_id))
+        return r.scalar_one_or_none()
 
-        CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER NOT NULL,
-            amount INTEGER DEFAULT 15000,
-            check_photo_id TEXT,
-            status TEXT DEFAULT 'pending',
-            submitted_at TEXT,
-            confirmed_at TEXT,
-            confirmed_by INTEGER,
-            FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
-        );
+async def create_user(telegram_id: int, full_name: str, username: str = None):
+    async with AsyncSessionLocal() as s:
+        existing = await s.execute(select(User).where(User.telegram_id == telegram_id))
+        if existing.scalar_one_or_none():
+            return
+        s.add(User(
+            telegram_id=telegram_id,
+            full_name=full_name,
+            username=username,
+            registered_at=datetime.utcnow()
+        ))
+        await s.commit()
 
-        CREATE TABLE IF NOT EXISTS test_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER NOT NULL,
-            score REAL,
-            total_questions INTEGER DEFAULT 30,
-            correct_answers INTEGER,
-            wrong_answers INTEGER,
-            difficulty TEXT DEFAULT 'mixed',
-            started_at TEXT,
-            finished_at TEXT,
-            FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS questions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject TEXT NOT NULL,
-            question_text TEXT NOT NULL,
-            option_a TEXT NOT NULL,
-            option_b TEXT NOT NULL,
-            option_c TEXT NOT NULL,
-            option_d TEXT NOT NULL,
-            correct_answer TEXT NOT NULL,
-            difficulty TEXT DEFAULT 'medium',
-            image_file_id TEXT
-        );
-    """)
-    conn.commit()
-    conn.close()
-    print("✅ Database initialized!")
-
-# ============ USER ============
-
-def get_user(telegram_id):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-def create_user(telegram_id, full_name, username=None):
-    conn = get_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "INSERT OR IGNORE INTO users (telegram_id, full_name, username, registered_at) VALUES (?,?,?,?)",
-            (telegram_id, full_name, username, datetime.now().isoformat())
+async def update_user_phone(telegram_id: int, phone: str):
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(User)
+            .where(User.telegram_id == telegram_id)
+            .values(phone_number=phone, is_registered=True)
         )
-        conn.commit()
-    finally:
-        conn.close()
+        await s.commit()
 
-def update_user_phone(telegram_id, phone):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("UPDATE users SET phone_number=?, is_registered=1 WHERE telegram_id=?", (phone, telegram_id))
-    conn.commit()
-    conn.close()
+async def is_registered(telegram_id: int) -> bool:
+    user = await get_user(telegram_id)
+    return bool(user and user.is_registered)
 
-def is_user_registered(telegram_id):
-    u = get_user(telegram_id)
-    return bool(u and u['is_registered'])
+async def get_all_users():
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(select(User).order_by(User.registered_at.desc()))
+        return r.scalars().all()
 
-def is_user_paid(telegram_id):
-    u = get_user(telegram_id)
-    return bool(u and u['payment_confirmed'])
+# ──────────────────────────────────────────────
+# ACCESS — bepul / pullik
+# ──────────────────────────────────────────────
 
-def get_all_users():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM users ORDER BY registered_at DESC")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-# ============ PAYMENT ============
-
-def create_payment(telegram_id, check_photo_id):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO payments (telegram_id, check_photo_id, submitted_at) VALUES (?,?,?)",
-        (telegram_id, check_photo_id, datetime.now().isoformat())
-    )
-    pid = cur.lastrowid
-    cur.execute("UPDATE users SET is_paid=1 WHERE telegram_id=?", (telegram_id,))
-    conn.commit()
-    conn.close()
-    return pid
-
-def confirm_payment(telegram_id, admin_id):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE payments SET status='confirmed', confirmed_at=?, confirmed_by=? WHERE telegram_id=? AND status='pending'",
-        (datetime.now().isoformat(), admin_id, telegram_id)
-    )
-    cur.execute(
-        "UPDATE users SET payment_confirmed=1, paid_at=? WHERE telegram_id=?",
-        (datetime.now().isoformat(), telegram_id)
-    )
-    conn.commit()
-    conn.close()
-
-def reject_payment(telegram_id, admin_id):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE payments SET status='rejected', confirmed_at=?, confirmed_by=? WHERE telegram_id=? AND status='pending'",
-        (datetime.now().isoformat(), admin_id, telegram_id)
-    )
-    cur.execute("UPDATE users SET is_paid=0 WHERE telegram_id=?", (telegram_id,))
-    conn.commit()
-    conn.close()
-
-def get_pending_payments():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT p.*, u.full_name, u.phone_number, u.username
-        FROM payments p JOIN users u ON p.telegram_id=u.telegram_id
-        WHERE p.status='pending' ORDER BY p.submitted_at DESC
-    """)
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-# ============ QUESTIONS ============
-
-def get_random_questions(subject="ona_tili", count=30, difficulty=None):
-    conn = get_connection()
-    cur = conn.cursor()
-    if difficulty and difficulty != 'mixed':
-        cur.execute(
-            "SELECT * FROM questions WHERE subject=? AND difficulty=? ORDER BY RANDOM() LIMIT ?",
-            (subject, difficulty, count)
+async def get_access_status(telegram_id: int, access_key: str) -> str:
+    """
+    'free'  — birinchi marta, bepul
+    'paid'  — retry to'lovi tasdiqlangan
+    'buy'   — to'lov kerak
+    """
+    async with AsyncSessionLocal() as s:
+        # Bepul urinish ishlatilganmi?
+        ua = await s.execute(
+            select(UserAccess).where(
+                UserAccess.telegram_id == telegram_id,
+                UserAccess.access_key == access_key
+            )
         )
-    else:
-        cur.execute(
-            "SELECT * FROM questions WHERE subject=? ORDER BY RANDOM() LIMIT ?",
-            (subject, count)
+        ua = ua.scalar_one_or_none()
+
+        if ua is None or not ua.free_used:
+            return 'free'
+
+        # FIX: product_type = 'retry', retry_key = access_key
+        paid = await s.execute(
+            select(Purchase).where(
+                Purchase.telegram_id == telegram_id,
+                Purchase.product_type == 'retry',       # ← faqat 'retry'
+                Purchase.retry_key == access_key,        # ← kalit alohida
+                Purchase.status == 'confirmed'
+            )
         )
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+        if paid.scalar_one_or_none():
+            return 'paid'
 
-def add_question(subject, question_text, option_a, option_b, option_c, option_d,
-                 correct_answer, difficulty="medium", image_file_id=None):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO questions
-        (subject, question_text, option_a, option_b, option_c, option_d, correct_answer, difficulty, image_file_id)
-        VALUES (?,?,?,?,?,?,?,?,?)
-    """, (subject, question_text, option_a, option_b, option_c, option_d,
-          correct_answer, difficulty, image_file_id))
-    conn.commit()
-    conn.close()
+        return 'buy'
 
-def get_questions_count(subject="ona_tili", difficulty=None):
-    conn = get_connection()
-    cur = conn.cursor()
-    if difficulty:
-        cur.execute("SELECT COUNT(*) FROM questions WHERE subject=? AND difficulty=?", (subject, difficulty))
-    else:
-        cur.execute("SELECT COUNT(*) FROM questions WHERE subject=?", (subject,))
-    count = cur.fetchone()[0]
-    conn.close()
-    return count
+async def mark_free_used(telegram_id: int, access_key: str):
+    async with AsyncSessionLocal() as s:
+        ua = await s.execute(
+            select(UserAccess).where(
+                UserAccess.telegram_id == telegram_id,
+                UserAccess.access_key == access_key
+            )
+        )
+        ua = ua.scalar_one_or_none()
+        if ua:
+            ua.free_used = True
+        else:
+            s.add(UserAccess(
+                telegram_id=telegram_id,
+                access_key=access_key,
+                free_used=True
+            ))
+        await s.commit()
 
-# ============ TEST RESULTS ============
+# ──────────────────────────────────────────────
+# ATTESTATION
+# ──────────────────────────────────────────────
 
-def save_test_result(telegram_id, correct, wrong, started_at, difficulty="mixed"):
-    conn = get_connection()
-    cur = conn.cursor()
-    total = correct + wrong
-    score = round((correct / total) * 100, 1) if total > 0 else 0
-    cur.execute("""
-        INSERT INTO test_results
-        (telegram_id, score, correct_answers, wrong_answers, difficulty, started_at, finished_at)
-        VALUES (?,?,?,?,?,?,?)
-    """, (telegram_id, score, correct, wrong, difficulty, started_at, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
+async def has_attestation(telegram_id: int, subject: str) -> bool:
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(
+            select(AttestationAccess).where(
+                AttestationAccess.telegram_id == telegram_id,
+                AttestationAccess.subject == subject
+            )
+        )
+        return r.scalar_one_or_none() is not None
 
-def get_user_results(telegram_id):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT * FROM test_results WHERE telegram_id=?
-        ORDER BY finished_at DESC LIMIT 5
-    """, (telegram_id,))
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+async def get_attestation_format(telegram_id: int, subject: str):
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(
+            select(AttestationAccess).where(
+                AttestationAccess.telegram_id == telegram_id,
+                AttestationAccess.subject == subject
+            )
+        )
+        row = r.scalar_one_or_none()
+        return row.format if row else None
 
-# ============ LEADERBOARD ============
+async def grant_attestation(telegram_id: int, subject: str, fmt: str):
+    async with AsyncSessionLocal() as s:
+        exists = await s.execute(
+            select(AttestationAccess).where(
+                AttestationAccess.telegram_id == telegram_id,
+                AttestationAccess.subject == subject
+            )
+        )
+        if not exists.scalar_one_or_none():
+            s.add(AttestationAccess(
+                telegram_id=telegram_id,
+                subject=subject,
+                format=fmt,
+                purchased_at=datetime.utcnow()
+            ))
+            await s.commit()
 
-def get_leaderboard(limit=10):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT u.full_name, u.username, MAX(r.score) as best_score,
-               COUNT(r.id) as attempts, MAX(r.correct_answers) as best_correct
-        FROM test_results r
-        JOIN users u ON r.telegram_id = u.telegram_id
-        GROUP BY r.telegram_id
-        ORDER BY best_score DESC, best_correct DESC
-        LIMIT ?
-    """, (limit,))
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+# ──────────────────────────────────────────────
+# PURCHASES
+# ──────────────────────────────────────────────
 
-# ============ STATISTICS ============
+async def create_purchase(telegram_id: int, product_type: str, amount: int,
+                           check_photo: str, retry_key: str = None) -> int:
+    """
+    product_type: 'retry' | 'attestation_onatili' | 'attestation_adabiyot'
+    retry_key:    access_key (faqat retry uchun)
+    """
+    async with AsyncSessionLocal() as s:
+        p = Purchase(
+            telegram_id=telegram_id,
+            product_type=product_type,  # ← har doim 'retry' yoki 'attestation_X'
+            retry_key=retry_key,
+            amount=amount,
+            check_photo=check_photo,
+            submitted_at=datetime.utcnow()
+        )
+        s.add(p)
+        await s.commit()
+        await s.refresh(p)
+        return p.id
 
-def get_daily_stats():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT DATE(registered_at) as date, COUNT(*) as new_users
-        FROM users
-        WHERE registered_at >= DATE('now', '-7 days')
-        GROUP BY DATE(registered_at)
-        ORDER BY date
-    """)
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+async def confirm_purchase(purchase_id: int, admin_id: int):
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(Purchase)
+            .where(Purchase.id == purchase_id)
+            .values(status='confirmed',
+                    confirmed_at=datetime.utcnow(),
+                    confirmed_by=admin_id)
+        )
+        await s.commit()
 
-def get_full_stats():
-    conn = get_connection()
-    cur = conn.cursor()
-    stats = {}
-    cur.execute("SELECT COUNT(*) FROM users")
-    stats['total_users'] = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM users WHERE is_registered=1")
-    stats['registered'] = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM users WHERE payment_confirmed=1")
-    stats['paid'] = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM payments WHERE status='pending'")
-    stats['pending_payments'] = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM test_results")
-    stats['total_tests'] = cur.fetchone()[0]
-    cur.execute("SELECT AVG(score) FROM test_results")
-    avg = cur.fetchone()[0]
-    stats['avg_score'] = round(avg, 1) if avg else 0
-    cur.execute("SELECT COUNT(*) FROM questions")
-    stats['total_questions'] = cur.fetchone()[0]
-    conn.close()
-    return stats
+async def reject_purchase(purchase_id: int, admin_id: int):
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(Purchase)
+            .where(Purchase.id == purchase_id)
+            .values(status='rejected',
+                    confirmed_at=datetime.utcnow(),
+                    confirmed_by=admin_id)
+        )
+        await s.commit()
 
-# ============ QUESTION CRUD ============
+async def get_pending_purchases():
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(
+            select(Purchase, User)
+            .join(User, Purchase.telegram_id == User.telegram_id)
+            .where(Purchase.status == 'pending')
+            .order_by(Purchase.submitted_at.asc())
+        )
+        return r.all()
 
-def get_question_by_id(question_id):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM questions WHERE id = ?", (question_id,))
-    row = cur.fetchone()
-    conn.close()
-    return row
+async def get_purchase_by_id(purchase_id: int):
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(select(Purchase).where(Purchase.id == purchase_id))
+        return r.scalar_one_or_none()
 
-def update_question(question_id, question_text=None, option_a=None, option_b=None,
-                    option_c=None, option_d=None, correct_answer=None,
-                    difficulty=None, image_file_id=None):
-    conn = get_connection()
-    cur = conn.cursor()
-    fields = []
-    values = []
-    if question_text is not None:
-        fields.append("question_text = ?"); values.append(question_text)
-    if option_a is not None:
-        fields.append("option_a = ?"); values.append(option_a)
-    if option_b is not None:
-        fields.append("option_b = ?"); values.append(option_b)
-    if option_c is not None:
-        fields.append("option_c = ?"); values.append(option_c)
-    if option_d is not None:
-        fields.append("option_d = ?"); values.append(option_d)
-    if correct_answer is not None:
-        fields.append("correct_answer = ?"); values.append(correct_answer)
-    if difficulty is not None:
-        fields.append("difficulty = ?"); values.append(difficulty)
-    if image_file_id is not None:
-        fields.append("image_file_id = ?"); values.append(image_file_id)
-    if not fields:
-        conn.close()
+# ──────────────────────────────────────────────
+# QUESTIONS
+# ──────────────────────────────────────────────
+
+async def get_questions(subject: str, category: str,
+                         subcategory: str = None, difficulty: str = None,
+                         count: int = 35, is_attestation: bool = False) -> list:
+    async with AsyncSessionLocal() as s:
+        if is_attestation:
+            q = select(Question).where(
+                Question.subject == subject,
+                Question.is_attestation == True
+            ).order_by(Question.order_num)
+        else:
+            filters = [
+                Question.subject == subject,
+                Question.category == category,
+                Question.is_attestation == False,
+            ]
+            if subcategory:
+                filters.append(Question.subcategory == subcategory)
+            if difficulty:
+                filters.append(Question.difficulty == difficulty)
+            q = select(Question).where(*filters).order_by(func.random()).limit(count)
+
+        r = await s.execute(q)
+        return r.scalars().all()
+
+async def count_questions(subject: str = None, category: str = None,
+                           subcategory: str = None, difficulty: str = None,
+                           is_attestation: bool = False) -> int:
+    """FIX: subject ixtiyoriy — question_editor barcha savollarni hisoblash uchun"""
+    async with AsyncSessionLocal() as s:
+        filters = []
+        if subject:        filters.append(Question.subject == subject)
+        if is_attestation: filters.append(Question.is_attestation == True)
+        else:
+            if category:    filters.append(Question.category == category)
+            if subcategory: filters.append(Question.subcategory == subcategory)
+            if difficulty:  filters.append(Question.difficulty == difficulty)
+
+        q = select(func.count()).select_from(Question)
+        if filters:
+            q = q.where(*filters)
+        r = await s.execute(q)
+        return r.scalar() or 0
+
+async def add_question(subject, category, question_text,
+                        option_a, option_b, option_c, option_d,
+                        correct_answer, subcategory=None,
+                        difficulty='medium', is_attestation=False,
+                        order_num=None, image_file_id=None):
+    async with AsyncSessionLocal() as s:
+        s.add(Question(
+            subject=subject, category=category, subcategory=subcategory,
+            difficulty=difficulty, is_attestation=is_attestation,
+            order_num=order_num, question_text=question_text,
+            option_a=option_a, option_b=option_b,
+            option_c=option_c, option_d=option_d,
+            correct_answer=correct_answer, image_file_id=image_file_id
+        ))
+        await s.commit()
+
+async def get_question_by_id(qid: int):
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(select(Question).where(Question.id == qid))
+        return r.scalar_one_or_none()
+
+async def update_question(qid: int, **kwargs):
+    allowed = ['subject','category','subcategory','difficulty','is_attestation',
+               'order_num','question_text','option_a','option_b','option_c',
+               'option_d','correct_answer','image_file_id']
+    values = {k: v for k, v in kwargs.items() if k in allowed}
+    if not values:
         return
-    values.append(question_id)
-    cur.execute(f"UPDATE questions SET {', '.join(fields)} WHERE id = ?", values)
-    conn.commit()
-    conn.close()
+    async with AsyncSessionLocal() as s:
+        await s.execute(update(Question).where(Question.id == qid).values(**values))
+        await s.commit()
 
-def delete_question(question_id):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM questions WHERE id = ?", (question_id,))
-    conn.commit()
-    conn.close()
+async def delete_question(qid: int):
+    async with AsyncSessionLocal() as s:
+        await s.execute(delete(Question).where(Question.id == qid))
+        await s.commit()
 
-def search_questions(keyword, subject="ona_tili"):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT * FROM questions
-        WHERE subject = ? AND question_text LIKE ?
-        ORDER BY id DESC LIMIT 20
-    """, (subject, f"%{keyword}%"))
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+async def get_questions_page(subject=None, category=None, offset=0, limit=5):
+    async with AsyncSessionLocal() as s:
+        filters = []
+        if subject:  filters.append(Question.subject == subject)
+        if category: filters.append(Question.category == category)
+        q = select(Question).order_by(Question.id.desc()).offset(offset).limit(limit)
+        if filters:
+            q = q.where(*filters)
+        r = await s.execute(q)
+        return r.scalars().all()
 
-def get_questions_page(subject="ona_tili", offset=0, limit=5):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT * FROM questions WHERE subject = ?
-        ORDER BY id DESC LIMIT ? OFFSET ?
-    """, (subject, limit, offset))
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+async def search_questions(keyword: str, subject: str = None):
+    async with AsyncSessionLocal() as s:
+        filters = [Question.question_text.ilike(f"%{keyword}%")]
+        if subject:
+            filters.append(Question.subject == subject)
+        r = await s.execute(
+            select(Question).where(*filters).order_by(Question.id.desc()).limit(30)
+        )
+        return r.scalars().all()
+
+# ──────────────────────────────────────────────
+# TEST RESULTS
+# ──────────────────────────────────────────────
+
+async def save_test_result(telegram_id, subject, category, subcategory,
+                            difficulty, correct, wrong, skipped,
+                            is_attestation=False) -> float:
+    async with AsyncSessionLocal() as s:
+        total = correct + wrong + skipped
+        score = round((correct / total) * 100, 1) if total > 0 else 0.0
+
+        # Attempt raqamini hisoblash
+        r = await s.execute(
+            select(func.count()).select_from(TestResult).where(
+                TestResult.telegram_id == telegram_id,
+                TestResult.subject == subject,
+                TestResult.category == category,
+                TestResult.subcategory == subcategory,
+                TestResult.difficulty == difficulty,
+            )
+        )
+        attempt = (r.scalar() or 0) + 1
+
+        s.add(TestResult(
+            telegram_id=telegram_id, subject=subject,
+            category=category, subcategory=subcategory,
+            difficulty=difficulty, is_attestation=is_attestation,
+            total=total, correct=correct, wrong=wrong,
+            skipped=skipped, score=score,
+            attempt_number=attempt,
+            started_at=datetime.utcnow(),
+            finished_at=datetime.utcnow()
+        ))
+        await s.commit()
+        return score
+
+async def get_user_results(telegram_id: int, limit: int = 10):
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(
+            select(TestResult)
+            .where(TestResult.telegram_id == telegram_id)
+            .order_by(TestResult.finished_at.desc())
+            .limit(limit)
+        )
+        return r.scalars().all()
+
+# ──────────────────────────────────────────────
+# LEADERBOARD
+# ──────────────────────────────────────────────
+
+async def get_leaderboard(limit: int = 10):
+    async with AsyncSessionLocal() as s:
+        r = await s.execute(
+            select(
+                User.full_name,
+                User.username,
+                func.max(TestResult.score).label('best_score'),
+                func.count(TestResult.id).label('attempts'),
+            )
+            .join(User, TestResult.telegram_id == User.telegram_id)
+            .group_by(TestResult.telegram_id, User.full_name, User.username)
+            .order_by(func.max(TestResult.score).desc())
+            .limit(limit)
+        )
+        return r.all()
+
+# ──────────────────────────────────────────────
+# STATISTICS
+# ──────────────────────────────────────────────
+
+async def get_full_stats() -> dict:
+    async with AsyncSessionLocal() as s:
+        async def scalar(q):
+            r = await s.execute(q)
+            return r.scalar() or 0
+
+        stats = {
+            'total_users':         await scalar(select(func.count()).select_from(User)),
+            'registered':          await scalar(select(func.count()).select_from(User).where(User.is_registered == True)),
+            'pending':             await scalar(select(func.count()).select_from(Purchase).where(Purchase.status == 'pending')),
+            'confirmed_purchases': await scalar(select(func.count()).select_from(Purchase).where(Purchase.status == 'confirmed')),
+            'total_tests':         await scalar(select(func.count()).select_from(TestResult)),
+            'total_questions':     await scalar(select(func.count()).select_from(Question)),
+            'attestation_q':       await scalar(select(func.count()).select_from(Question).where(Question.is_attestation == True)),
+        }
+        avg_r = await s.execute(select(func.avg(TestResult.score)))
+        avg = avg_r.scalar()
+        stats['avg_score'] = round(float(avg), 1) if avg else 0
+        return stats

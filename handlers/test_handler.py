@@ -1,234 +1,457 @@
-from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
-from datetime import datetime
 
 from database.db import (
-    get_random_questions, save_test_result, get_user_results,
-    is_user_paid, is_user_registered, get_leaderboard
+    is_registered, get_access_status, mark_free_used,
+    has_attestation, get_attestation_format,
+    get_questions, count_questions
 )
 from keyboards.keyboards import (
-    test_answer_keyboard, main_menu_keyboard,
-    start_test_keyboard, difficulty_keyboard
+    onatili_category_keyboard, onatili_topics_keyboard,
+    adabiyot_category_keyboard, grades_keyboard,
+    difficulty_keyboard, retry_buy_keyboard,
+    attestation_buy_keyboard, attestation_format_keyboard,
+    miniapp_keyboard, main_menu_keyboard
 )
-from states import TestStates
+from config import config
 
 router = Router()
-TOTAL_QUESTIONS = 30
 
-DIFFICULTY_NAMES = {
-    'easy': '🟢 Oson',
-    'medium': '🟡 O\'rta',
-    'hard': '🔴 Qiyin',
-    'mixed': '🎲 Aralash'
-}
+# ══════════════════════════════════════════════
+# YORDAMCHI FUNKSIYALAR
+# ══════════════════════════════════════════════
 
-def format_question(q, index, total, difficulty):
-    filled = index + 1
-    empty = total - filled
-    bar = "▓" * filled + "░" * empty
-    diff_label = DIFFICULTY_NAMES.get(difficulty, '')
+def make_access_key(subject: str, category: str,
+                    subcategory: str = None, difficulty: str = None) -> str:
+    """
+    Unikal kalit yaratish — access tekshirish uchun
+    Masalan: 'onatili:mavzu:fonetika:easy'
+             'adabiyot:sinf:7:medium'
+             'onatili:aralash:None:hard'
+    """
+    return f"{subject}:{category}:{subcategory}:{difficulty}"
 
-    text = (
-        f"📊 <b>{index+1}/{total}</b>  [{bar}]  {diff_label}\n\n"
-        f"❓ <b>{q['question_text']}</b>\n\n"
-        f"🅰 {q['option_a']}\n"
-        f"🅱 {q['option_b']}\n"
-        f"🅲 {q['option_c']}\n"
-        f"🅳 {q['option_d']}"
-    )
-    return text
+import json, base64, zlib
 
-@router.message(F.text == "📝 Testni boshlash")
-async def start_test_prompt(message: Message, state: FSMContext):
-    if not is_user_registered(message.from_user.id):
-        await message.answer("❌ Avval ro'yxatdan o'ting! /start")
-        return
-    if not is_user_paid(message.from_user.id):
-        await message.answer(
-            "❌ Test uchun to'lov qilishingiz kerak!\n💳 \"To'lov qilish\" tugmasini bosing.",
-            reply_markup=main_menu_keyboard(is_paid=False)
-        )
-        return
-    await message.answer(
-        "🎯 <b>Qiyinlik darajasini tanlang:</b>",
-        reply_markup=difficulty_keyboard(),
-        parse_mode="HTML"
-    )
-    await state.set_state(TestStates.choosing_difficulty)
+def encode_questions(q_list: list, meta: dict = None) -> str:
+    """Savollar + meta ma'lumotlarni compress qilib URL hash uchun encode qilish"""
+    payload = {'meta': meta or {}, 'questions': q_list}
+    raw = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+    compressed = zlib.compress(raw.encode('utf-8'), level=9)
+    return base64.urlsafe_b64encode(compressed).decode('ascii')
 
-@router.callback_query(TestStates.choosing_difficulty, F.data.startswith("diff:"))
-async def choose_difficulty(callback: CallbackQuery, state: FSMContext):
-    difficulty = callback.data.split(":")[1]
-    questions = get_random_questions(subject="ona_tili", count=TOTAL_QUESTIONS, difficulty=difficulty)
+def questions_to_miniapp(questions: list) -> list:
+    """SQLAlchemy object → Mini App uchun dict"""
+    return [
+        {
+            "id":  q.id,
+            "t":   q.question_text,
+            "a":   q.option_a,
+            "b":   q.option_b,
+            "c":   q.option_c,
+            "d":   q.option_d,
+            "ok":  q.correct_answer,
+            "img": q.image_file_id or ""
+        }
+        for q in questions
+    ]
 
-    if len(questions) == 0:
-        await callback.answer("❌ Bu darajada savollar yo'q!", show_alert=True)
-        return
-
-    q_list = [dict(q) for q in questions]
-    await state.set_data({
-        "questions": q_list,
-        "current_index": 0,
-        "correct": 0,
-        "wrong": 0,
-        "difficulty": difficulty,
-        "started_at": datetime.now().isoformat()
-    })
-    await state.set_state(TestStates.answering)
-    await callback.message.delete()
-
-    first_q = q_list[0]
-    # Agar rasmli savol bo'lsa
-    if first_q.get('image_file_id'):
-        await callback.message.answer_photo(
-            photo=first_q['image_file_id'],
-            caption=format_question(first_q, 0, len(q_list), difficulty),
-            reply_markup=test_answer_keyboard(0),
-            parse_mode="HTML"
-        )
-    else:
-        await callback.message.answer(
-            format_question(first_q, 0, len(q_list), difficulty),
-            reply_markup=test_answer_keyboard(0),
-            parse_mode="HTML"
-        )
-    await callback.answer()
-
-@router.callback_query(TestStates.answering, F.data.startswith("answer:"))
-async def process_answer(callback: CallbackQuery, state: FSMContext):
-    parts = callback.data.split(":")
-    q_index = int(parts[1])
-    selected = parts[2]
-
-    data = await state.get_data()
-    questions = data["questions"]
-    current_index = data["current_index"]
-    difficulty = data["difficulty"]
-
-    if q_index != current_index:
-        await callback.answer("⚠️ Bu savol o'tib ketgan!", show_alert=True)
-        return
-
-    current_q = questions[current_index]
-    correct_answer = current_q["correct_answer"]
-    is_correct = selected == correct_answer
-
-    correct = data["correct"] + (1 if is_correct else 0)
-    wrong = data["wrong"] + (0 if is_correct else 1)
-
-    option_map = {
-        "A": current_q["option_a"], "B": current_q["option_b"],
-        "C": current_q["option_c"], "D": current_q["option_d"]
-    }
-
-    if is_correct:
-        result_text = "✅ <b>To'g'ri!</b>"
-    else:
-        result_text = (
-            "❌ <b>Noto'g'ri!</b>\n"
-            f"To'g'ri javob: <b>{correct_answer}) {option_map[correct_answer]}</b>"
-        )
-
-    next_index = current_index + 1
-    total = len(questions)
-
-    # Joriy savolga natija ko'rsat
+async def safe_edit(callback: CallbackQuery, text: str, reply_markup=None):
+    """edit_text — xuddi shu matn bo'lsa xatoni e'tiborsiz qoldiradi"""
     try:
-        if current_q.get('image_file_id'):
-            await callback.message.edit_caption(
-                caption=format_question(current_q, current_index, total, difficulty) + f"\n\n{result_text}",
-                parse_mode="HTML"
-            )
-        else:
-            await callback.message.edit_text(
-                format_question(current_q, current_index, total, difficulty) + f"\n\n{result_text}",
-                parse_mode="HTML"
-            )
-    except Exception:
-        pass
+        await safe_edit(callback,
+            text, reply_markup=reply_markup,
+        )
+    except Exception as e:
+        if "message is not modified" not in str(e):
+            raise
 
-    if next_index >= total:
-        await state.update_data(correct=correct, wrong=wrong)
-        await finish_test(callback, state, correct, wrong, data["started_at"], difficulty, total)
+async def send_miniapp(callback: CallbackQuery, subject: str, category: str,
+                        subcategory: str = None, difficulty: str = None,
+                        is_attestation: bool = False):
+    """Savollarni bazadan olib Mini App ga yuborish"""
+    SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
+    DIFF = {'easy': '🟢 Oson', 'medium': "🟡 O'rta", 'hard': '🔴 Qiyin'}
+
+    # Savollar sonini tekshirish
+    cnt = await count_questions(
+        subject=subject, category=category,
+        subcategory=subcategory, difficulty=difficulty,
+        is_attestation=is_attestation
+    )
+
+    if cnt == 0 and not is_attestation:
+        sub_label  = f" › {subcategory}" if subcategory else ''
+        diff_label = DIFF.get(difficulty, '') if difficulty else ''
+        await safe_edit(
+            callback,
+            f"📭 <b>{SUBJ.get(subject,'')}{sub_label}</b> {diff_label}\n\n"
+            f"Bu bo'limda hozircha savollar yo'q.\n\n"
+            f"⏳ Tez orada qo'shiladi!",
+        )
         await callback.answer()
         return
 
-    await state.update_data(current_index=next_index, correct=correct, wrong=wrong)
+    # Savollarni olish — bor bo'lsa barchasi (max 35)
+    questions = await get_questions(
+        subject=subject, category=category,
+        subcategory=subcategory, difficulty=difficulty,
+        count=config.ATTESTATION_COUNT if is_attestation else cnt,
+        is_attestation=is_attestation
+    )
 
-    next_q = questions[next_index]
-    if next_q.get('image_file_id'):
-        await callback.message.answer_photo(
-            photo=next_q['image_file_id'],
-            caption=format_question(next_q, next_index, total, difficulty),
-            reply_markup=test_answer_keyboard(next_index),
-            parse_mode="HTML"
-        )
+    if not questions:
+        await safe_edit(callback, "📭 Savollar topilmadi. Tez orada qo'shiladi!")
+        await callback.answer()
+        return
+
+    # Encode → URL hash (meta bilan birga)
+    meta = {
+        'subject':        subject,
+        'category':       category,
+        'subcategory':    subcategory,
+        'difficulty':     difficulty,
+        'is_attestation': is_attestation,
+    }
+    encoded = encode_questions(questions_to_miniapp(questions), meta)
+    url = f"{config.MINI_APP_URL}#{encoded}"
+
+    subj_label   = SUBJ.get(subject, subject)
+    diff_label   = DIFF.get(difficulty, '') if difficulty else ''
+    sub_label    = f" › {subcategory}" if subcategory else ''
+    attest_label = " › Atestatsiya" if is_attestation else ''
+
+    await safe_edit(
+        callback,
+        f"{subj_label}<b>{sub_label}{attest_label}</b> {diff_label}\n\n"
+        f"📊 Savollar: <b>{len(questions)} ta</b>\n"
+        f"{'🔒 Tartib boyicha (random emas)' if is_attestation else '🎲 Random tartibda'}\n\n"
+        f"Pastdagi tugmani bosib testni boshlang 👇",
+        reply_markup=miniapp_keyboard(url),
+    )
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# BACK CALLBACKS
+# ══════════════════════════════════════════════
+
+@router.callback_query(F.data == "back:main")
+async def back_main(callback: CallbackQuery):
+    await callback.message.delete()
+    await callback.answer()
+
+@router.callback_query(F.data == "back:onatili")
+async def back_onatili(callback: CallbackQuery):
+    await safe_edit(callback,
+        "📚 <b>Ona tili</b>\n\nBo'limni tanlang:",
+        reply_markup=onatili_category_keyboard(),
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "back:adabiyot")
+async def back_adabiyot(callback: CallbackQuery):
+    await safe_edit(callback,
+        "📖 <b>Adabiyot</b>\n\nBo'limni tanlang:",
+        reply_markup=adabiyot_category_keyboard(),
+    )
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# ONA TILI — kategoriya
+# ══════════════════════════════════════════════
+
+@router.callback_query(F.data == "onatili:mavzu")
+async def onatili_mavzu(callback: CallbackQuery):
+    await safe_edit(callback,
+        "📌 <b>Mavzulashtirilgan testlar</b>\n\nMavzuni tanlang:",
+        reply_markup=onatili_topics_keyboard(),
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "onatili:aralash")
+async def onatili_aralash(callback: CallbackQuery):
+    await safe_edit(callback,
+        "🎲 <b>Ona tili — Aralash</b>\n\nQiyinlik darajasini tanlang:",
+        reply_markup=difficulty_keyboard("onatili:aralash"),
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "onatili:attestation")
+async def onatili_attestation(callback: CallbackQuery):
+    tid = callback.from_user.id
+
+    if await has_attestation(tid, 'onatili'):
+        fmt = await get_attestation_format(tid, 'onatili')
+        if fmt == 'miniapp':
+            await send_miniapp(callback, 'onatili', 'attestation',
+                               is_attestation=True)
+        else:
+            await send_pdf_attestation(callback, 'onatili')
     else:
-        await callback.message.answer(
-            format_question(next_q, next_index, total, difficulty),
-            reply_markup=test_answer_keyboard(next_index),
-            parse_mode="HTML"
+        await safe_edit(callback,
+            "🎓 <b>Ona tili Atestatsiya</b>\n\n"
+            "📋 35 ta belgilangan savol (random emas)\n"
+            "💳 Bir martalik to'lov\n\n"
+            f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>",
+            reply_markup=attestation_buy_keyboard('onatili'),
         )
     await callback.answer()
 
-async def finish_test(callback, state, correct, wrong, started_at, difficulty, total):
-    score = round((correct / total) * 100, 1)
+# ── Ona tili mavzu tanlash ───────────────────
 
-    if score >= 90:
-        grade, emoji = "🏆 A'lo (5)", "🎉🥇"
-    elif score >= 70:
-        grade, emoji = "👍 Yaxshi (4)", "😊✨"
-    elif score >= 50:
-        grade, emoji = "📚 Qoniqarli (3)", "🙂📖"
+@router.callback_query(F.data.startswith("onatili:topic:"))
+async def onatili_topic(callback: CallbackQuery):
+    # onatili:topic:fonetika
+    topic = callback.data.split(":")[2]
+    topic_label = config.ONA_TILI_TOPICS.get(topic, topic)
+
+    await safe_edit(callback,
+        f"📌 <b>{topic_label}</b>\n\nQiyinlik darajasini tanlang:",
+        reply_markup=difficulty_keyboard(f"onatili:topic:{topic}"),
+    )
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# ADABIYOT — kategoriya
+# ══════════════════════════════════════════════
+
+@router.callback_query(F.data == "adabiyot:sinf")
+async def adabiyot_sinf(callback: CallbackQuery):
+    await safe_edit(callback,
+        "🏫 <b>Sinflar bo'yicha test</b>\n\nSinfni tanlang:",
+        reply_markup=grades_keyboard(),
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "adabiyot:aralash")
+async def adabiyot_aralash(callback: CallbackQuery):
+    await safe_edit(callback,
+        "🎲 <b>Adabiyot — Aralash</b>\n\nQiyinlik darajasini tanlang:",
+        reply_markup=difficulty_keyboard("adabiyot:aralash"),
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "adabiyot:gazallar")
+async def adabiyot_gazallar(callback: CallbackQuery):
+    await safe_edit(callback,
+        "📜 <b>G'azallar</b>\n\nQiyinlik darajasini tanlang:",
+        reply_markup=difficulty_keyboard("adabiyot:gazallar"),
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "adabiyot:attestation")
+async def adabiyot_attestation(callback: CallbackQuery):
+    tid = callback.from_user.id
+
+    if await has_attestation(tid, 'adabiyot'):
+        fmt = await get_attestation_format(tid, 'adabiyot')
+        if fmt == 'miniapp':
+            await send_miniapp(callback, 'adabiyot', 'attestation',
+                               is_attestation=True)
+        else:
+            await send_pdf_attestation(callback, 'adabiyot')
     else:
-        grade, emoji = "❌ Qoniqarsiz (2)", "😔📚"
+        await safe_edit(callback,
+            "🎓 <b>Adabiyot Atestatsiya</b>\n\n"
+            "📋 35 ta belgilangan savol (random emas)\n"
+            "💳 Bir martalik to'lov\n\n"
+            f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>",
+            reply_markup=attestation_buy_keyboard('adabiyot'),
+        )
+    await callback.answer()
 
-    diff_label = DIFFICULTY_NAMES.get(difficulty, difficulty)
-    encouragement = "🌟 Ajoyib natija!" if score >= 70 else "📚 Ko'proq mashq qiling!"
+# ── Adabiyot sinf tanlash ────────────────────
 
-    result_text = (
-        f"{emoji} <b>Test yakunlandi!</b>\n\n"
-        f"━━━━━━━━━━━━━━\n"
-        f"🎯 Daraja: <b>{diff_label}</b>\n"
-        f"✅ To'g'ri: <b>{correct}/{total}</b>\n"
-        f"❌ Noto'g'ri: <b>{wrong}/{total}</b>\n"
-        f"📈 Ball: <b>{score}%</b>\n"
-        f"🎓 Baho: <b>{grade}</b>\n"
-        f"━━━━━━━━━━━━━━\n\n"
-        f"{encouragement}"
+@router.callback_query(F.data.startswith("adabiyot:grade:"))
+async def adabiyot_grade(callback: CallbackQuery):
+    # adabiyot:grade:7
+    grade = callback.data.split(":")[2]
+    grade_label = config.GRADES.get(grade, grade)
+
+    await safe_edit(callback,
+        f"🏫 <b>{grade_label}</b>\n\nQiyinlik darajasini tanlang:",
+        reply_markup=difficulty_keyboard(f"adabiyot:grade:{grade}"),
+    )
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# QIYINLIK TANLANDI → ACCESS TEKSHIRISH
+# ══════════════════════════════════════════════
+# Callback data formatlari:
+#   onatili:aralash:easy
+#   onatili:topic:fonetika:easy
+#   adabiyot:aralash:medium
+#   adabiyot:grade:7:hard
+#   adabiyot:gazallar:easy
+
+@router.callback_query(F.data.regexp(
+    r"^(onatili|adabiyot):(aralash|gazallar|topic\:\w+|grade\:\d+):(easy|medium|hard)$"
+))
+async def difficulty_chosen(callback: CallbackQuery):
+    tid  = callback.from_user.id
+    parts = callback.data.split(":")
+    # parts[0] = subject
+    # parts[1] = category  (yoki 'topic' / 'grade')
+    # parts[-1] = difficulty
+
+    subject    = parts[0]
+    difficulty = parts[-1]
+
+    # Category va subcategory ajratish
+    if parts[1] == 'topic':
+        category    = 'mavzu'
+        subcategory = parts[2]
+    elif parts[1] == 'grade':
+        category    = 'sinf'
+        subcategory = parts[2]
+    elif parts[1] == 'aralash':
+        category    = 'aralash'
+        subcategory = None
+    elif parts[1] == 'gazallar':
+        category    = 'gazallar'
+        subcategory = None
+    else:
+        category    = parts[1]
+        subcategory = None
+
+    access_key = make_access_key(subject, category, subcategory, difficulty)
+    status     = await get_access_status(tid, access_key)
+
+    if status == 'free':
+        # Bepul urinish — belgilash va testni boshlash
+        await mark_free_used(tid, access_key)
+        await send_miniapp(
+            callback, subject, category,
+            subcategory=subcategory, difficulty=difficulty
+        )
+
+    elif status == 'paid':
+        # To'lov tasdiqlangan — testni boshlash
+        await send_miniapp(
+            callback, subject, category,
+            subcategory=subcategory, difficulty=difficulty
+        )
+
+    else:
+        # To'lov kerak
+        SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
+        DIFF = {'easy': '🟢 Oson', 'medium': "🟡 O'rta", 'hard': '🔴 Qiyin'}
+        sub_label = f" › {subcategory}" if subcategory else ''
+
+        await safe_edit(callback,
+            f"🔒 <b>Birinchi urinishingizni allaqachon ishlatgansiz!</b>\n\n"
+            f"📚 {SUBJ.get(subject, subject)}{sub_label} {DIFF.get(difficulty,'')}\n\n"
+            f"Qayta urinish uchun to'lov qiling:\n"
+            f"💰 <b>{config.PRICE_RETRY:,} so'm</b>",
+            reply_markup=retry_buy_keyboard(access_key),
+        )
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# ATESTATSIYA FORMAT
+# ══════════════════════════════════════════════
+
+@router.callback_query(F.data.startswith("attest_fmt:"))
+async def attestation_format_chosen(callback: CallbackQuery):
+    # attest_fmt:onatili:miniapp
+    _, subject, fmt = callback.data.split(":")
+
+    from database.db import grant_attestation
+    await grant_attestation(callback.from_user.id, subject, fmt)
+
+    if fmt == 'miniapp':
+        await send_miniapp(callback, subject, 'attestation', is_attestation=True)
+    else:
+        await send_pdf_attestation(callback, subject)
+
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# PDF ATESTATSIYA (placeholder)
+# ══════════════════════════════════════════════
+
+async def send_pdf_attestation(callback: CallbackQuery, subject: str):
+    """PDF formatda atestatsiya — keyingi bosqichda to'liq amalga oshiriladi"""
+    SUBJ = {'onatili': 'Ona tili', 'adabiyot': 'Adabiyot'}
+    await safe_edit(callback,
+        f"📄 <b>{SUBJ.get(subject, subject)} Atestatsiya — PDF</b>\n\n"
+        f"⏳ PDF tayyorlanmoqda...\n"
+        f"Tez orada yuboriladi!",
     )
 
-    save_test_result(callback.from_user.id, correct, wrong, started_at, difficulty)
-    await state.clear()
-    await callback.message.answer(result_text, reply_markup=main_menu_keyboard(is_paid=True), parse_mode="HTML")
+# ══════════════════════════════════════════════
+# MINI APP NATIJA QABUL QILISH
+# ══════════════════════════════════════════════
 
-@router.message(F.text == "📊 Mening natijalarim")
-async def my_results(message: Message):
-    results = get_user_results(message.from_user.id)
-    if not results:
-        await message.answer("📊 Hali test ishlamagansiz.\n📝 Testni boshlash tugmasini bosing!")
-        return
+@router.message(F.web_app_data)
+async def receive_miniapp_result(message: Message):
+    import json
+    from database.db import save_test_result
 
-    text = "📊 <b>Sizning natijalaringiz:</b>\n\n"
-    for i, r in enumerate(results, 1):
-        date = r['finished_at'][:10] if r['finished_at'] else "—"
-        diff = DIFFICULTY_NAMES.get(r['difficulty'], r['difficulty'])
-        text += f"{i}. 📅 {date}  {diff}\n   ✅ {r['correct_answers']}/30  📈 {r['score']}%\n\n"
-    await message.answer(text, parse_mode="HTML")
+    try:
+        data = json.loads(message.web_app_data.data)
+        correct = data.get('correct', 0)
+        wrong   = data.get('wrong', 0)
+        skipped = data.get('skip', 0)
+        total   = data.get('total', 35)
+        pct     = data.get('score', 0)
 
-@router.message(F.text == "🏆 Reyting")
-async def leaderboard(message: Message):
-    leaders = get_leaderboard(10)
-    if not leaders:
-        await message.answer("🏆 Hali reyting mavjud emas!")
-        return
+        # FSM da saqlangan meta ma'lumotlar yo'q (hash orqali yuborilgan)
+        # Shuning uchun subject/category ni data dan olamiz
+        subject        = data.get('subject', 'onatili')
+        category       = data.get('category', 'aralash')
+        subcategory    = data.get('subcategory')
+        difficulty     = data.get('difficulty')
+        is_attestation = data.get('is_attestation', False)
 
-    medals = ["🥇", "🥈", "🥉"] + ["4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
-    text = "🏆 <b>Eng yaxshi natijalar:</b>\n\n"
-    for i, row in enumerate(leaders):
-        name = row['full_name'] or "Noma'lum"
-        medal = medals[i] if i < len(medals) else f"{i+1}."
-        text += f"{medal} <b>{name}</b> — {row['best_score']}%  ({row['attempts']} marta)\n"
+        score = await save_test_result(
+            telegram_id=message.from_user.id,
+            subject=subject, category=category,
+            subcategory=subcategory, difficulty=difficulty,
+            correct=correct, wrong=wrong, skipped=skipped,
+            is_attestation=is_attestation
+        )
 
-    await message.answer(text, parse_mode="HTML")
+        # Baho
+        if pct >= 90:   grade, emoji = "A'lo (5)",      "🏆"
+        elif pct >= 70: grade, emoji = "Yaxshi (4)",     "🎉"
+        elif pct >= 50: grade, emoji = "Qoniqarli (3)",  "📚"
+        else:           grade, emoji = "Qoniqarsiz (2)", "😔"
+
+        encouragement = "🌟 Ajoyib! Shunday davom eting!" if pct >= 70 \
+                        else "📖 Ko'proq mashq qiling!"
+
+        await message.answer(
+            f"{emoji} <b>Test natijasi saqlandi!</b>\n\n"
+            f"━━━━━━━━━━━━━\n"
+            f"✅ To'g'ri:    <b>{correct}/{total}</b>\n"
+            f"❌ Xato:       <b>{wrong}/{total}</b>\n"
+            f"⏭ O'tkazildi: <b>{skipped}</b>\n"
+            f"📈 Ball:       <b>{pct}%</b>\n"
+            f"🎓 Baho:       <b>{grade}</b>\n"
+            f"━━━━━━━━━━━━━\n\n"
+            f"{encouragement}",
+            reply_markup=main_menu_keyboard(),
+        )
+
+        # Adminlarga xabar
+        from aiogram import Bot
+        from aiogram.client.default import DefaultBotProperties
+        from aiogram.enums import ParseMode
+        bot = message.bot
+        for admin_id in config.ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    chat_id=admin_id,
+                    text=(
+                        f"📊 Yangi natija\n"
+                        f"👤 {message.from_user.full_name}\n"
+                        f"📈 {pct}% ({correct}/{total})"
+                    )
+                )
+            except Exception:
+                pass
+
+    except Exception as e:
+        await message.answer(f"❌ Natijani saqlashda xato: {e}")
