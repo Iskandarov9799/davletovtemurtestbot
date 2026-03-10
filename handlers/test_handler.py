@@ -117,6 +117,10 @@ async def send_miniapp(callback: CallbackQuery, subject: str, category: str,
     encoded = encode_questions(questions_to_miniapp(questions), meta)
     url = f"{config.MINI_APP_URL}#{encoded}"
 
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Mini App URL uzunligi: {len(url)} belgi")
+
     subj_label   = SUBJ.get(subject, subject)
     diff_label   = DIFF.get(difficulty, '') if difficulty else ''
     sub_label    = f" › {subcategory}" if subcategory else ''

@@ -32,11 +32,9 @@ def main_menu_keyboard():
     )
 
 def cancel_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Bekor qilish")]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="payment:cancel")]
+    ])
 
 def back_keyboard():
     return ReplyKeyboardMarkup(

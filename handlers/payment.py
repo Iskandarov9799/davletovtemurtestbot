@@ -34,7 +34,7 @@ async def buy_handler(callback: CallbackQuery, state: FSMContext):
     if product_type == 'retry':
         amount     = config.PRICE_RETRY
         retry_key  = rest
-        product_id = f"retry:{retry_key}"
+        product_id = 'retry'          # ← DB da 'retry', kalit retry_key da
         desc       = f"🔄 Qayta urinish\n<code>{retry_key}</code>"
 
     elif product_type == 'attestation':
@@ -292,3 +292,10 @@ async def pending_payments(message: Message, bot: Bot):
 async def cancel_payment(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("❌ Bekor qilindi.", reply_markup=main_menu_keyboard())
+
+@router.callback_query(F.data == "payment:cancel")
+async def cancel_payment_callback(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("❌ Bekor qilindi.")
+    await callback.message.answer("🏠 Asosiy menyu:", reply_markup=main_menu_keyboard())
+    await callback.answer()
