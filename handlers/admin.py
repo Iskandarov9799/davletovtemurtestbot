@@ -390,3 +390,184 @@ async def addq_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Bekor qilindi.")
     await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
     await callback.answer()
+
+# ══════════════════════════════════════════════
+# EXCEL DAN KO'P SAVOL YUKLASH
+# ══════════════════════════════════════════════
+
+@router.message(F.text == "📤 Excel import")
+async def excel_import_start(message: Message):
+    if not is_admin(message): return
+
+    # Shablon yaratib yuborish
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Savollar"
+
+    # Sarlavha
+    headers = [
+        "subject", "category", "subcategory", "difficulty",
+        "is_attestation", "order_num",
+        "question", "a", "b", "c", "d", "correct"
+    ]
+    ws.append(headers)
+
+    # Sarlavhalarni qalin qilish
+    from openpyxl.styles import Font, PatternFill
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col)
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor="4472C4")
+        cell.font = Font(bold=True, color="FFFFFF")
+
+    # Ustun kengligini moslashtirish
+    widths = [10, 12, 14, 12, 14, 10, 50, 25, 25, 25, 25, 10]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+
+    # Misol qatorlar
+    examples = [
+        ["onatili", "mavzu", "fonetika", "easy",   "FALSE", "", "O'zbek tilida nechta unli tovush bor?", "5 ta", "6 ta", "7 ta", "8 ta", "B"],
+        ["onatili", "aralash", "", "medium",         "FALSE", "", "Sinonimlarga misol:", "katta-kichik", "baland-past", "go'zal-chiroyli", "tez-sekin", "C"],
+        ["adabiyot", "sinf", "7", "hard",            "FALSE", "", "Navoiy qaysi asrda yashagan?", "XIV", "XV", "XVI", "XVII", "B"],
+        ["adabiyot", "gazallar", "", "easy",         "FALSE", "", "G'azal necha misradan iborat?", "4", "6", "8", "10", "C"],
+        ["onatili", "attestation", "", "",           "TRUE",  "1", "Fonetika nima?", "So'z haqidagi fan", "Tovush haqidagi fan", "Gap haqidagi fan", "Harf haqidagi fan", "B"],
+    ]
+    for row in examples:
+        ws.append(row)
+
+    # Izohlar varaqasi
+    ws2 = wb.create_sheet("Qo'llanma")
+    ws2.column_dimensions['A'].width = 20
+    ws2.column_dimensions['B'].width = 50
+    guide = [
+        ("subject",        "onatili | adabiyot"),
+        ("category",       "mavzu | aralash | sinf | gazallar | attestation"),
+        ("subcategory",    "mavzu uchun: fonetika, leksika, morfologiya, sintaksis, imlo, uslubiyat\nsinf uchun: 5, 6, 7, 8, 9, 10, 11\nboshqalar uchun: bo'sh"),
+        ("difficulty",     "easy | medium | hard  (attestation uchun bo'sh)"),
+        ("is_attestation", "TRUE | FALSE"),
+        ("order_num",      "Faqat attestation uchun tartib raqami (1, 2, 3...), boshqalar uchun bo'sh"),
+        ("question",       "Savol matni"),
+        ("a, b, c, d",     "Variant matni"),
+        ("correct",        "To'g'ri javob: A | B | C | D"),
+    ]
+    ws2.append(["Ustun", "Qiymatlar"])
+    ws2.cell(1,1).font = Font(bold=True)
+    ws2.cell(1,2).font = Font(bold=True)
+    for row in guide:
+        ws2.append(list(row))
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    await message.answer_document(
+        document=BufferedInputFile(buf.read(), filename="savollar_shablon.xlsx"),
+        caption=(
+            "📋 <b>Excel shablon</b>\n\n"
+            "1️⃣ Shu faylni yuklab oling\n"
+            "2️⃣ Savollarni to'ldiring\n"
+            "3️⃣ Faylni botga yuboring\n\n"
+            "📌 <b>Qo'llanma</b> varaqasini ham o'qing!"
+        ),
+        parse_mode="HTML"
+    )
+
+@router.message(F.document)
+async def excel_import_upload(message: Message):
+    if not is_admin(message): return
+
+    doc = message.document
+    if not doc.file_name or not doc.file_name.endswith('.xlsx'):
+        return  # xlsx emas — e'tiborsiz
+
+    await message.answer("⏳ Fayl o'qilmoqda...")
+
+    # Faylni yuklab olish
+    from aiogram import Bot
+    bot: Bot = message.bot
+    file = await bot.get_file(doc.file_id)
+    buf = io.BytesIO()
+    await bot.download_file(file.file_path, buf)
+    buf.seek(0)
+
+    wb = openpyxl.load_workbook(buf)
+    ws = wb.active
+
+    VALID_SUBJECTS    = {'onatili', 'adabiyot'}
+    VALID_CATEGORIES  = {'mavzu', 'aralash', 'sinf', 'gazallar', 'attestation'}
+    VALID_DIFFICULTIES= {'easy', 'medium', 'hard', ''}
+    VALID_CORRECT     = {'A', 'B', 'C', 'D'}
+
+    added   = 0
+    skipped = 0
+    errors  = []
+
+    for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if not row or not any(row):
+            continue  # Bo'sh qator
+
+        try:
+            subject        = str(row[0] or '').strip().lower()
+            category       = str(row[1] or '').strip().lower()
+            subcategory    = str(row[2] or '').strip() or None
+            difficulty     = str(row[3] or '').strip().lower()
+            is_attestation = str(row[4] or '').strip().upper() == 'TRUE'
+            order_num      = int(row[5]) if row[5] else None
+            question_text  = str(row[6] or '').strip()
+            option_a       = str(row[7] or '').strip()
+            option_b       = str(row[8] or '').strip()
+            option_c       = str(row[9] or '').strip()
+            option_d       = str(row[10] or '').strip()
+            correct        = str(row[11] or '').strip().upper()
+
+            # Validatsiya
+            if subject not in VALID_SUBJECTS:
+                errors.append(f"Qator {row_num}: subject '{subject}' noto'g'ri")
+                skipped += 1
+                continue
+            if category not in VALID_CATEGORIES:
+                errors.append(f"Qator {row_num}: category '{category}' noto'g'ri")
+                skipped += 1
+                continue
+            if not question_text:
+                errors.append(f"Qator {row_num}: savol matni bo'sh")
+                skipped += 1
+                continue
+            if correct not in VALID_CORRECT:
+                errors.append(f"Qator {row_num}: correct '{correct}' noto'g'ri (A/B/C/D)")
+                skipped += 1
+                continue
+            if not all([option_a, option_b, option_c, option_d]):
+                errors.append(f"Qator {row_num}: variantlar to'liq emas")
+                skipped += 1
+                continue
+
+            await add_question(
+                subject=subject, category=category,
+                subcategory=subcategory, difficulty=difficulty or None,
+                is_attestation=is_attestation, order_num=order_num,
+                question_text=question_text,
+                option_a=option_a, option_b=option_b,
+                option_c=option_c, option_d=option_d,
+                correct_answer=correct
+            )
+            added += 1
+
+        except Exception as e:
+            errors.append(f"Qator {row_num}: {e}")
+            skipped += 1
+
+    # Natija
+    text = (
+        f"✅ <b>Import tugadi!</b>\n\n"
+        f"✅ Qo'shildi: <b>{added} ta</b>\n"
+        f"❌ O'tkazildi: <b>{skipped} ta</b>\n"
+    )
+    if errors:
+        error_text = "\n".join(errors[:10])
+        if len(errors) > 10:
+            error_text += f"\n... va yana {len(errors)-10} ta xato"
+        text += f"\n⚠️ <b>Xatolar:</b>\n<code>{error_text}</code>"
+
+    await message.answer(text, parse_mode="HTML", reply_markup=admin_keyboard())

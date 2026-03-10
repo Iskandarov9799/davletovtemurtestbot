@@ -60,8 +60,8 @@ def questions_to_miniapp(questions: list) -> list:
 async def safe_edit(callback: CallbackQuery, text: str, reply_markup=None):
     """edit_text — xuddi shu matn bo'lsa xatoni e'tiborsiz qoldiradi"""
     try:
-        await safe_edit(callback,
-            text, reply_markup=reply_markup,
+        await callback.message.edit_text(
+            text, reply_markup=reply_markup, parse_mode="HTML"
         )
     except Exception as e:
         if "message is not modified" not in str(e):
@@ -97,7 +97,7 @@ async def send_miniapp(callback: CallbackQuery, subject: str, category: str,
     questions = await get_questions(
         subject=subject, category=category,
         subcategory=subcategory, difficulty=difficulty,
-        count=config.ATTESTATION_COUNT if is_attestation else cnt,
+        count=config.ATTESTATION_COUNT if is_attestation else min(cnt, config.ATTESTATION_COUNT),
         is_attestation=is_attestation
     )
 
@@ -200,9 +200,9 @@ async def onatili_attestation(callback: CallbackQuery):
 
 # ── Ona tili mavzu tanlash ───────────────────
 
-@router.callback_query(F.data.startswith("onatili:topic:"))
+@router.callback_query(F.data.regexp(r"^onatili:topic:[^:]+$"))
 async def onatili_topic(callback: CallbackQuery):
-    # onatili:topic:fonetika
+    # onatili:topic:fonetika  (difficulty YO'Q — faqat 3 qism)
     topic = callback.data.split(":")[2]
     topic_label = config.ONA_TILI_TOPICS.get(topic, topic)
 
@@ -263,7 +263,7 @@ async def adabiyot_attestation(callback: CallbackQuery):
 
 # ── Adabiyot sinf tanlash ────────────────────
 
-@router.callback_query(F.data.startswith("adabiyot:grade:"))
+@router.callback_query(F.data.regexp(r"^adabiyot:grade:\d+$"))
 async def adabiyot_grade(callback: CallbackQuery):
     # adabiyot:grade:7
     grade = callback.data.split(":")[2]

@@ -35,10 +35,10 @@ async def main():
 
     # 5. Routerlar
     from handlers import registration, payment, test_handler, admin, question_editor
+    dp.include_router(admin.router)
     dp.include_router(registration.router)
     dp.include_router(payment.router)
     dp.include_router(test_handler.router)
-    dp.include_router(admin.router)
     dp.include_router(question_editor.router)
 
     logger.info("🚀 Bot ishga tushdi! Admin IDs: %s", config.ADMIN_IDS)

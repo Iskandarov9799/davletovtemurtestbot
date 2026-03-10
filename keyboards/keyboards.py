@@ -51,7 +51,7 @@ def admin_keyboard():
             [KeyboardButton(text="👥 Foydalanuvchilar"),  KeyboardButton(text="📊 Statistika")],
             [KeyboardButton(text="📢 Broadcast"),          KeyboardButton(text="➕ Savol qo'shish")],
             [KeyboardButton(text="📋 Savollar"),           KeyboardButton(text="📥 Excel eksport")],
-            [KeyboardButton(text="🔙 Orqaga")],
+            [KeyboardButton(text="📤 Excel import"),       KeyboardButton(text="🔙 Orqaga")],
         ],
         resize_keyboard=True
     )
