@@ -131,7 +131,7 @@ function initTest() {
 
   buildGrid();
   renderQuestion(0);
-  document.getElementById('test-screen').style.display  = 'flex';
+  document.getElementById('test-screen').style.display  = 'block';
   document.getElementById('result-screen').style.display = 'none';
 }
 
