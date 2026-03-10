@@ -185,6 +185,8 @@ function renderQuestion(i) {
   const pct = Math.round((i + 1) / total * 100);
   document.getElementById('progress-fill').style.width  = pct + '%';
   document.getElementById('progress-label').textContent = `${i + 1} / ${total}`;
+  const pctEl = document.getElementById('progress-pct');
+  if (pctEl) pctEl.textContent = pct + '%';
   document.getElementById('score-badge').textContent    = score + ' ball';
 
   // Savol
@@ -207,7 +209,7 @@ function renderQuestion(i) {
     const div = document.createElement('div');
     div.className = 'option';
     div.id        = 'opt-' + lbl;
-    div.innerHTML = `<span class="opt-lbl">${lbl}</span><span class="opt-txt">${TEXTS[idx]}</span>`;
+    div.innerHTML = `<span class="option-letter">${lbl}</span><span class="option-text">${TEXTS[idx]}</span>`;
     div.onclick   = () => selectOption(lbl);
     opts.appendChild(div);
   });
