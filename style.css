@@ -297,3 +297,63 @@ body {
   transition: all 0.2s;
 }
 .btn-send:active { transform: scale(0.98); }
+
+/* ===== RESPONSIVE ===== */
+@media (min-width: 480px) {
+  .header { padding: 18px 28px 14px; }
+  .header-title { font-size: 19px; }
+
+  .progress-wrap { padding: 12px 28px; }
+
+  .question-section { padding: 20px 28px; }
+  .question-text { font-size: 19px; }
+
+  .options { padding: 0 28px 20px; gap: 12px; }
+  .option { padding: 16px 20px; }
+  .option-text { font-size: 16px; }
+
+  .actions { padding: 0 28px 20px; }
+  .btn { font-size: 16px; padding: 16px; }
+
+  .grid-section { padding: 14px 28px 120px; }
+  .grid-btn { width: 42px; height: 42px; font-size: 14px; }
+
+  #result-screen { padding: 36px 28px 48px; }
+  .result-title { font-size: 28px; }
+  .result-score { font-size: 64px; }
+}
+
+@media (min-width: 768px) {
+  body { max-width: 600px; margin: 0 auto; }
+
+  .header { padding: 20px 32px 16px; }
+  .header-title { font-size: 21px; }
+
+  .question-section { padding: 24px 32px; }
+  .question-text { font-size: 21px; }
+  .question-img { max-height: 240px; }
+
+  .options { padding: 0 32px 24px; gap: 14px; }
+  .option { padding: 18px 22px; border-radius: 16px; }
+  .option-label { width: 36px; height: 36px; font-size: 15px; }
+  .option-text { font-size: 17px; }
+
+  .actions { padding: 0 32px 24px; }
+  .btn { font-size: 17px; padding: 18px; border-radius: 16px; }
+
+  .grid-section { padding: 16px 32px 140px; }
+  .grid-btn { width: 46px; height: 46px; font-size: 15px; border-radius: 12px; }
+
+  #result-screen { padding: 40px 32px 56px; }
+  .result-emoji { font-size: 80px; }
+  .result-title { font-size: 32px; }
+  .result-score { font-size: 72px; }
+  .stat-val { font-size: 32px; }
+}
+
+/* Telegram WebApp safe area */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .grid-section {
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+}

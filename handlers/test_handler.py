@@ -115,11 +115,12 @@ async def send_miniapp(callback: CallbackQuery, subject: str, category: str,
         'is_attestation': is_attestation,
     }
     encoded = encode_questions(questions_to_miniapp(questions), meta)
-    url = f"{config.MINI_APP_URL}?data={encoded}"
+    url = f"https://iskandarov9799.github.io/davletovtemurtestbot/?data={encoded}"
 
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"Mini App URL uzunligi: {len(url)} belgi")
+    logger.info(f"URL boshi: {url[:150]}")
 
     subj_label   = SUBJ.get(subject, subject)
     diff_label   = DIFF.get(difficulty, '') if difficulty else ''
@@ -320,7 +321,18 @@ async def difficulty_chosen(callback: CallbackQuery):
         subcategory = None
 
     access_key = make_access_key(subject, category, subcategory, difficulty)
-    status     = await get_access_status(tid, access_key)
+
+    # Ro'yxatdan o'tganmi tekshirish
+    if not await is_registered(tid):
+        await safe_edit(callback,
+            "👤 <b>Ro'yxatdan o'tmagansiz!</b>\n\n"
+            "Testdan foydalanish uchun avval ro'yxatdan o'ting.\n"
+            "📱 /start buyrug'ini yuboring."
+        )
+        await callback.answer()
+        return
+
+    status = await get_access_status(tid, access_key)
 
     if status == 'free':
         # Bepul urinish — belgilash va testni boshlash
