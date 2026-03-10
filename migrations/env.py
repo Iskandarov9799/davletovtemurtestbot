@@ -43,13 +43,14 @@ def do_run_migrations(connection):
 
 
 async def run_async_migrations():
-    # Supabase SSL talab qiladi
-    ssl_ctx = ssl.create_default_context()
+    # Lokal PostgreSQL uchun SSL kerak emas
+    is_local = "localhost" in db_url or "127.0.0.1" in db_url
+    connect_args = {} if is_local else {"ssl": ssl.create_default_context()}
 
     connectable = create_async_engine(
         db_url,
         poolclass=pool.NullPool,
-        connect_args={"ssl": ssl_ctx},
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

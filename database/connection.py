@@ -13,15 +13,17 @@ def _make_engine(url: str):
     if url.startswith("sqlite"):
         return create_async_engine(url, echo=False)
 
-    # Supabase va boshqa remote DB lar uchun SSL
-    ssl_ctx = ssl.create_default_context()
+    # Lokal PostgreSQL uchun SSL kerak emas
+    is_local = "localhost" in url or "127.0.0.1" in url
+    connect_args = {} if is_local else {"ssl": ssl.create_default_context()}
+
     return create_async_engine(
         url,
         echo=False,
         pool_size=10,
         max_overflow=20,
         pool_pre_ping=True,
-        connect_args={"ssl": ssl_ctx},
+        connect_args=connect_args,
     )
 
 _engine           = None

@@ -115,13 +115,18 @@ function initTest() {
 
   // Sarlavha
   const SUBJ = { onatili:'📚 Ona tili', adabiyot:'📖 Adabiyot' };
+  const DIFF = { easy:'🟢 Oson', medium:"🟡 O'rta", hard:'🔴 Qiyin' };
   const title = SUBJ[meta.subject] || '📚 Test';
+  const sub   = meta.subcategory ? ` › ${meta.subcategory}` : '';
+  const diff  = DIFF[meta.difficulty] || '';
   document.getElementById('header-title').textContent = title;
+  const subEl = document.getElementById('header-sub');
+  if (subEl) subEl.textContent = (meta.category || '') + sub + (diff ? ' · ' + diff : '');
 
   // Telegram sarlavha rangi
   if (tg) {
-    tg.setHeaderColor?.('#1a1a2e');
-    tg.setBackgroundColor?.('#1a1a2e');
+    tg.setHeaderColor?.('#0a0e1a');
+    tg.setBackgroundColor?.('#0a0e1a');
   }
 
   buildGrid();
