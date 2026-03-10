@@ -35,10 +35,12 @@ const DEMO = [
 // ════════════════════════════════════════════════
 async function loadQuestionsFromHash() {
   showLoader(true);
-  const hash = window.location.hash.slice(1);
+  // ?data= query param dan o'qish (hash ishlamaydi WebAppInfo da)
+  const params = new URLSearchParams(window.location.search);
+  const hash   = params.get('data') || window.location.hash.slice(1);
 
   if (!hash) {
-    console.warn('Hash yo\'q — demo ishlatiladi');
+    console.warn('Data yo\'q — demo ishlatiladi');
     questions = DEMO;
     meta      = { subject:'onatili', category:'aralash', difficulty:'easy', is_attestation:false };
     initTest();
