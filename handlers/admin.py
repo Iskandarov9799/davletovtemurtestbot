@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 
 from database.db import (
     get_all_users, get_full_stats, add_question,
-    count_questions
+    count_questions, delete_all_questions
 )
 from keyboards.keyboards import (
     admin_keyboard, cancel_keyboard, main_menu_keyboard,
@@ -390,6 +390,65 @@ async def addq_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Bekor qilindi.")
     await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
     await callback.answer()
+
+# ══════════════════════════════════════════════
+# BARCHA SAVOLLARNI O'CHIRISH
+# ══════════════════════════════════════════════
+
+@router.message(F.text == "🗑 Savollarni o'chirish")
+async def delete_questions_confirm(message: Message):
+    if not is_admin(message): return
+    cnt = await count_questions()
+    await message.answer(
+        f"⚠️ <b>Diqqat!</b>\n\n"
+        f"Hozir bazada <b>{cnt} ta</b> savol bor.\n"
+        f"Barchasini o'chirishni tasdiqlaysizmi?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🗑 Ha, o'chirish", callback_data="admin:delete_all_q"),
+                InlineKeyboardButton(text="❌ Yo'q", callback_data="admin:cancel_delete"),
+            ]
+        ]),
+        parse_mode="HTML"
+    )
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+@router.callback_query(F.data == "admin:delete_all_q")
+async def delete_questions_execute(callback: CallbackQuery):
+    deleted = await delete_all_questions()
+    await callback.message.edit_text(
+        f"🗑 <b>{deleted} ta savol o'chirildi!</b>",
+        parse_mode="HTML"
+    )
+    await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
+    await callback.answer()
+
+@router.callback_query(F.data == "admin:cancel_delete")
+async def delete_questions_cancel(callback: CallbackQuery):
+    await callback.message.edit_text("❌ Bekor qilindi.")
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# YECHIM LINKI
+# ══════════════════════════════════════════════
+
+@router.message(F.text == "🔗 Yechim linki")
+async def solution_url_info(message: Message):
+    if not is_admin(message): return
+    url = config.SOLUTION_URL
+    if url:
+        await message.answer(
+            f"🔗 <b>Hozirgi yechim linki:</b>\n<code>{url}</code>\n\n"
+            f"O'zgartirish uchun .env faylida <code>SOLUTION_URL</code> ni yangilang.",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "⚠️ <b>SOLUTION_URL</b> .env faylida yo'q!\n\n"
+            "Qo'shish uchun:\n<code>SOLUTION_URL=https://t.me/kanal_nomi</code>",
+            parse_mode="HTML"
+        )
 
 # ══════════════════════════════════════════════
 # EXCEL DAN KO'P SAVOL YUKLASH

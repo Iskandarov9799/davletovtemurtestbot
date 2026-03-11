@@ -404,3 +404,10 @@ async def get_full_stats() -> dict:
         avg = avg_r.scalar()
         stats['avg_score'] = round(float(avg), 1) if avg else 0
         return stats
+
+async def delete_all_questions() -> int:
+    """Barcha savollarni o'chirish, o'chirilgan soni qaytaradi"""
+    async with AsyncSessionLocal() as s:
+        result = await s.execute(delete(Question))
+        await s.commit()
+        return result.rowcount

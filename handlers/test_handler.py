@@ -113,6 +113,7 @@ async def send_miniapp(callback: CallbackQuery, subject: str, category: str,
         'subcategory':    subcategory,
         'difficulty':     difficulty,
         'is_attestation': is_attestation,
+        'solution_url':   config.SOLUTION_URL,
     }
     encoded = encode_questions(questions_to_miniapp(questions), meta)
     url = f"https://iskandarov9799.github.io/davletovtemurtestbot/?data={encoded}"

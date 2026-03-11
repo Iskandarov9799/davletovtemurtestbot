@@ -18,6 +18,7 @@ class Config:
     ])
     PAYMENT_CARD:  str  = field(default_factory=lambda: os.getenv("PAYMENT_CARD",  "8600 0000 0000 0000"))
     PAYMENT_OWNER: str  = field(default_factory=lambda: os.getenv("PAYMENT_OWNER", "Karta egasi"))
+    SOLUTION_URL:  str  = field(default_factory=lambda: os.getenv("SOLUTION_URL", ""))
 
     # ── Narxlar (so'm) ──────────────────────────────
     PRICE_RETRY:       int = 5_000
