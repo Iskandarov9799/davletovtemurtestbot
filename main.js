@@ -106,7 +106,7 @@ function showLoader(on) {
 // ════════════════════════════════════════════════
 function initTest() {
   if (!questions.length) {
-    document.getElementById('qtxt').textContent = '❌ Savollar topilmadi!';
+    document.getElementById('question-text').textContent = '❌ Savollar topilmadi!';
     return;
   }
   answers = new Array(questions.length).fill(null);
@@ -119,8 +119,8 @@ function initTest() {
   const title = SUBJ[meta.subject] || '📚 Test';
   const sub   = meta.subcategory ? ` › ${meta.subcategory}` : '';
   const diff  = DIFF[meta.difficulty] || '';
-  document.getElementById('hdr-title').textContent = title;
-  const subEl = document.getElementById('hdr-sub');
+  document.getElementById('header-title').textContent = title;
+  const subEl = document.getElementById('header-sub');
   if (subEl) subEl.textContent = (meta.category || '') + sub + (diff ? ' · ' + diff : '');
 
   // Telegram sarlavha rangi
@@ -131,7 +131,7 @@ function initTest() {
 
   buildGrid();
   renderQuestion(0);
-  document.getElementById('test-screen').style.display  = 'block';
+  document.getElementById('test-screen').style.display  = 'flex';
   document.getElementById('result-screen').style.display = 'none';
 }
 
@@ -143,7 +143,7 @@ function buildGrid() {
   g.innerHTML = '';
   questions.forEach((_, i) => {
     const btn       = document.createElement('button');
-    btn.className   = 'gbtn' + (i === 0 ? ' current' : '');
+    btn.className   = 'grid-btn' + (i === 0 ? ' current' : '');
     btn.id          = 'gb-' + i;
     btn.textContent = i + 1;
     btn.onclick     = () => jumpTo(i);
@@ -155,11 +155,11 @@ function updateGrid() {
   questions.forEach((_, i) => {
     const btn = document.getElementById('gb-' + i);
     if (!btn) return;
-    btn.className = 'gbtn';
-    if      (i === current)            btn.classList.add('cur');
-    else if (answers[i] === 'correct') btn.classList.add('ok');
-    else if (answers[i] === 'wrong')   btn.classList.add('err');
-    else if (answers[i] === 'skip')    btn.classList.add('skp');
+    btn.className = 'grid-btn';
+    if      (i === current)            btn.classList.add('current');
+    else if (answers[i] === 'correct') btn.classList.add('g-correct');
+    else if (answers[i] === 'wrong')   btn.classList.add('g-wrong');
+    else if (answers[i] === 'skip')    btn.classList.add('g-skip');
   });
 }
 
@@ -183,45 +183,43 @@ function renderQuestion(i) {
 
   // Progress
   const pct = Math.round((i + 1) / total * 100);
-  document.getElementById('prg-fill').style.width  = pct + '%';
-  document.getElementById('prg-label').textContent = `${i + 1} / ${total}`;
-  const pctEl = document.getElementById('prg-pct');
-  if (pctEl) pctEl.textContent = pct + '%';
-  document.getElementById('hdr-score').textContent    = score + ' ball';
+  document.getElementById('progress-fill').style.width  = pct + '%';
+  document.getElementById('progress-label').textContent = `${i + 1} / ${total}`;
+  document.getElementById('score-badge').textContent    = score + ' ball';
 
   // Savol
-  document.getElementById('qnum').textContent  = `SAVOL ${i + 1}`;
-  document.getElementById('qtxt').textContent = qText;
+  document.getElementById('question-num').textContent  = `SAVOL ${i + 1}`;
+  document.getElementById('question-text').textContent = qText;
 
   // Rasm
-  const imgEl  = document.getElementById('qimg');
+  const imgEl  = document.getElementById('question-img');
   const imgSrc = q.img || '';
   imgEl.style.display = imgSrc ? 'block' : 'none';
   if (imgSrc) imgEl.src = imgSrc;
 
   // Variantlar
-  const opts   = document.getElementById('opts');
+  const opts   = document.getElementById('options');
   opts.innerHTML = '';
   const LBLS   = ['A', 'B', 'C', 'D'];
   const TEXTS  = [q.a||'', q.b||'', q.c||'', q.d||''];
 
   LBLS.forEach((lbl, idx) => {
     const div = document.createElement('div');
-    div.className = 'opt';
+    div.className = 'option';
     div.id        = 'opt-' + lbl;
-    div.innerHTML = `<span class="opt-ltr">${lbl}</span><span class="opt-txt">${TEXTS[idx]}</span>`;
+    div.innerHTML = `<span class="opt-lbl">${lbl}</span><span class="opt-txt">${TEXTS[idx]}</span>`;
     div.onclick   = () => selectOption(lbl);
     opts.appendChild(div);
   });
 
   // Feedback yashirish
-  const fb = document.getElementById('fb');
-  fb.className     = 'fb';
+  const fb = document.getElementById('feedback');
+  fb.className     = 'feedback';
   fb.style.display = 'none';
   fb.innerHTML     = '';
 
   // Tugmalar
-  document.getElementById('btn-skip').style.display = 'inline-flex';
+  document.getElementById('btn-skip').style.display   = 'inline-flex';
   document.getElementById('btn-next').style.display   = 'none';
   document.getElementById('btn-finish').style.display = 'none';
 
@@ -241,34 +239,29 @@ function selectOption(label) {
 
   // Barcha variantlarni o'chirish
   document.querySelectorAll('.option').forEach(o => {
-    o.classList.add('off');
+    o.classList.add('disabled');
     o.onclick = null;
   });
 
   // Ranglar
   document.getElementById('opt-' + label).classList.add(isOk ? 'correct' : 'wrong');
-  if (!isOk) document.getElementById('opt-' + correct)?.classList.add('hint');
+  if (!isOk) document.getElementById('opt-' + correct)?.classList.add('show-correct');
 
   // Holat yangilash
   answers[current] = isOk ? 'correct' : 'wrong';
   if (isOk) score++;
-  document.getElementById('hdr-score').textContent = score + ' ball';
+  document.getElementById('score-badge').textContent = score + ' ball';
 
-  // Feedback + yechim linki
-  const TEXTS      = { A: q.a, B: q.b, C: q.c, D: q.d };
-  const fb         = document.getElementById('fb');
-  const solutionUrl = meta.solution_url || '';
-  const linkHtml   = solutionUrl
-    ? `<br><a href="${solutionUrl}" target="_blank" style="color:inherit;opacity:0.85;font-size:12px;text-decoration:underline;">📹 Yechimni ko'rish</a>`
-    : '';
-
-  fb.style.display = 'flex';
+  // Feedback
+  const TEXTS = { A: q.a, B: q.b, C: q.c, D: q.d };
+  const fb    = document.getElementById('feedback');
+  fb.style.display = 'block';
   if (isOk) {
-    fb.className = 'fb ok';
-    fb.innerHTML = `✅ To'g'ri javob!${linkHtml}`;
+    fb.className = 'feedback fb-correct';
+    fb.innerHTML = '✅ To\'g\'ri javob!';
   } else {
-    fb.className = 'fb err';
-    fb.innerHTML = `❌ Noto'g'ri! To'g'ri: <b>${correct}) ${TEXTS[correct] || ''}</b>${linkHtml}`;
+    fb.className = 'feedback fb-wrong';
+    fb.innerHTML = `❌ Noto'g'ri! To'g'ri: <b>${correct}) ${TEXTS[correct] || ''}</b>`;
   }
 
   // Keyingi tugma
@@ -335,9 +328,10 @@ function showResult() {
   ];
   const [, emoji, grade, color] = grades.find(([min]) => pct >= min);
 
-  document.getElementById('r-emoji').textContent  = emoji;
-  document.getElementById('r-grade').textContent  = grade;
-  document.getElementById('r-score').textContent  = pct + '%';
+  document.getElementById('result-emoji').textContent  = emoji;
+  document.getElementById('result-grade').textContent  = grade;
+  document.getElementById('result-score').textContent  = pct + '%';
+  document.getElementById('result-score').style.color  = color;
   document.getElementById('r-correct').textContent     = correct;
   document.getElementById('r-wrong').textContent       = wrong;
   document.getElementById('r-skip').textContent        = skip;
@@ -345,10 +339,12 @@ function showResult() {
   // Natija gridi
   const rg = document.getElementById('result-grid');
   rg.innerHTML = '';
-  const colMap = { correct:'ok', wrong:'err', skip:'skp' };
+  const colMap = { correct:'#22c55e', wrong:'#ef4444', skip:'#f59e0b' };
   answers.forEach((a, i) => {
     const d = document.createElement('div');
-    d.className   = 'gbtn ' + (colMap[a] || '');
+    d.className   = 'rgrid-cell';
+    d.style.background = colMap[a] || '#2a2a40';
+    d.style.color      = a ? 'white' : '#6b6b8a';
     d.textContent = i + 1;
     rg.appendChild(d);
   });
