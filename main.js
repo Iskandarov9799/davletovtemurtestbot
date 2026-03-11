@@ -240,23 +240,23 @@ function selectOption(label) {
   const isOk    = label === correct;
 
   // Barcha variantlarni o'chirish
-  document.querySelectorAll('.option').forEach(o => {
-    o.classList.add('disabled');
+  document.querySelectorAll('.opt').forEach(o => {
+    o.classList.add('off');
     o.onclick = null;
   });
 
   // Ranglar
   document.getElementById('opt-' + label).classList.add(isOk ? 'correct' : 'wrong');
-  if (!isOk) document.getElementById('opt-' + correct)?.classList.add('show-correct');
+  if (!isOk) document.getElementById('opt-' + correct)?.classList.add('hint');
 
   // Holat yangilash
   answers[current] = isOk ? 'correct' : 'wrong';
   if (isOk) score++;
-  document.getElementById('score-badge').textContent = score + ' ball';
+  document.getElementById('hdr-score').textContent = score + ' ball';
 
   // Feedback + yechim linki
   const TEXTS      = { A: q.a, B: q.b, C: q.c, D: q.d };
-  const fb         = document.getElementById('feedback');
+  const fb         = document.getElementById('fb');
   const solutionUrl = meta.solution_url || '';
   const linkHtml   = solutionUrl
     ? `<br><a href="${solutionUrl}" target="_blank" style="color:inherit;opacity:0.85;font-size:12px;text-decoration:underline;">📹 Yechimni ko'rish</a>`
@@ -264,10 +264,10 @@ function selectOption(label) {
 
   fb.style.display = 'flex';
   if (isOk) {
-    fb.className = 'feedback correct-fb';
+    fb.className = 'fb ok';
     fb.innerHTML = `✅ To'g'ri javob!${linkHtml}`;
   } else {
-    fb.className = 'feedback wrong-fb';
+    fb.className = 'fb err';
     fb.innerHTML = `❌ Noto'g'ri! To'g'ri: <b>${correct}) ${TEXTS[correct] || ''}</b>${linkHtml}`;
   }
 
@@ -276,7 +276,7 @@ function selectOption(label) {
   const isLast = current === questions.length - 1;
   const allDone = answers.every(a => a !== null);
   if (allDone || isLast) {
-    document.getElementById('btn-finish').style.display = 'inline-flex';
+    document.getElementById('btn-end').style.display = 'inline-flex';
   } else {
     document.getElementById('btn-next').style.display = 'inline-flex';
   }
@@ -338,7 +338,6 @@ function showResult() {
   document.getElementById('r-emoji').textContent  = emoji;
   document.getElementById('r-grade').textContent  = grade;
   document.getElementById('r-score').textContent  = pct + '%';
-  document.getElementById('r-score').style.color  = color;
   document.getElementById('r-correct').textContent     = correct;
   document.getElementById('r-wrong').textContent       = wrong;
   document.getElementById('r-skip').textContent        = skip;
@@ -346,12 +345,10 @@ function showResult() {
   // Natija gridi
   const rg = document.getElementById('result-grid');
   rg.innerHTML = '';
-  const colMap = { correct:'#22c55e', wrong:'#ef4444', skip:'#f59e0b' };
+  const colMap = { correct:'ok', wrong:'err', skip:'skp' };
   answers.forEach((a, i) => {
     const d = document.createElement('div');
-    d.className   = 'rgrid-cell';
-    d.style.background = colMap[a] || '#2a2a40';
-    d.style.color      = a ? 'white' : '#6b6b8a';
+    d.className   = 'gbtn ' + (colMap[a] || '');
     d.textContent = i + 1;
     rg.appendChild(d);
   });
