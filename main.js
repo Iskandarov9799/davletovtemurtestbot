@@ -106,7 +106,7 @@ function showLoader(on) {
 // ════════════════════════════════════════════════
 function initTest() {
   if (!questions.length) {
-    document.getElementById('qtxt').textContent = '❌ Savollar topilmadi!';
+    document.getElementById('question-text').textContent = '❌ Savollar topilmadi!';
     return;
   }
   answers = new Array(questions.length).fill(null);
@@ -119,8 +119,8 @@ function initTest() {
   const title = SUBJ[meta.subject] || '📚 Test';
   const sub   = meta.subcategory ? ` › ${meta.subcategory}` : '';
   const diff  = DIFF[meta.difficulty] || '';
-  document.getElementById('hdr-title').textContent = title;
-  const subEl = document.getElementById('hdr-sub');
+  document.getElementById('header-title').textContent = title;
+  const subEl = document.getElementById('header-sub');
   if (subEl) subEl.textContent = (meta.category || '') + sub + (diff ? ' · ' + diff : '');
 
   // Telegram sarlavha rangi
@@ -187,11 +187,11 @@ function renderQuestion(i) {
   document.getElementById('prg-label').textContent = `${i + 1} / ${total}`;
   const pctEl = document.getElementById('prg-pct');
   if (pctEl) pctEl.textContent = pct + '%';
-  document.getElementById('hdr-score').textContent    = score + ' ball';
+  document.getElementById('score-badge').textContent    = score + ' ball';
 
   // Savol
   document.getElementById('qnum').textContent  = `SAVOL ${i + 1}`;
-  document.getElementById('qtxt').textContent = qText;
+  document.getElementById('question-text').textContent = qText;
 
   // Rasm
   const imgEl  = document.getElementById('qimg');
@@ -209,13 +209,13 @@ function renderQuestion(i) {
     const div = document.createElement('div');
     div.className = 'opt';
     div.id        = 'opt-' + lbl;
-    div.innerHTML = `<span class="opt-ltr">${lbl}</span><span class="opt-txt">${TEXTS[idx]}</span>`;
+    div.innerHTML = `<span class="option-letter">${lbl}</span><span class="option-text">${TEXTS[idx]}</span>`;
     div.onclick   = () => selectOption(lbl);
     opts.appendChild(div);
   });
 
   // Feedback yashirish
-  const fb = document.getElementById('fb');
+  const fb = document.getElementById('feedback');
   fb.className     = 'fb';
   fb.style.display = 'none';
   fb.innerHTML     = '';
@@ -223,7 +223,7 @@ function renderQuestion(i) {
   // Tugmalar
   document.getElementById('btn-skip').style.display = 'inline-flex';
   document.getElementById('btn-next').style.display   = 'none';
-  document.getElementById('btn-end').style.display = 'none';
+  document.getElementById('btn-finish').style.display = 'none';
 
   updateGrid();
 }
