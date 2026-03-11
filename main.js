@@ -8,19 +8,13 @@ if (tg) {
   tg.disableClosingConfirmation?.();
 }
 
-// ════════════════════════════════════════════════
-// HOLAT (STATE)
-// ════════════════════════════════════════════════
 let questions = [];
-let answers   = [];   // null | 'correct' | 'wrong' | 'skip'
+let answers   = [];
 let current   = 0;
 let score     = 0;
 let answered  = false;
-let meta      = {};   // subject, category, subcategory, difficulty, is_attestation
+let meta      = {};
 
-// ════════════════════════════════════════════════
-// DEMO — hash bo'lmasa ishlatiladi
-// ════════════════════════════════════════════════
 const DEMO = [
   { id:1,  t:"Fe'lning necha zamonlari bor?",            a:"2 ta",    b:"3 ta",    c:"4 ta",   d:"5 ta",              ok:"B", img:"" },
   { id:2,  t:"Qaysi so'z olmosh turkumiga kiradi?",      a:"kitob",   b:"men",     c:"yaxshi", d:"yugurmoq",          ok:"B", img:"" },
@@ -29,13 +23,8 @@ const DEMO = [
   { id:5,  t:"Antonim nima?",                            a:"Ma'nodosh so'zlar", b:"Qarama-qarshi ma'noli so'zlar", c:"Shakldosh so'zlar", d:"Ko'p ma'noli so'zlar", ok:"B", img:"" },
 ];
 
-// ════════════════════════════════════════════════
-// HASH DAN SAVOLLAR + META O'QISH
-// Format: base64url(zlib(JSON({meta, questions})))
-// ════════════════════════════════════════════════
 async function loadQuestionsFromHash() {
   showLoader(true);
-  // ?data= query param dan o'qish (hash ishlamaydi WebAppInfo da)
   const params = new URLSearchParams(window.location.search);
   const hash   = params.get('data') || window.location.hash.slice(1);
 
@@ -49,12 +38,10 @@ async function loadQuestionsFromHash() {
   }
 
   try {
-    // base64url → bytes
     const b64    = hash.replace(/-/g, '+').replace(/_/g, '/');
     const binary = atob(b64);
     const bytes  = Uint8Array.from(binary, c => c.charCodeAt(0));
 
-    // zlib decompress
     const ds     = new DecompressionStream('deflate');
     const writer = ds.writable.getWriter();
     const reader = ds.readable.getReader();
@@ -75,7 +62,6 @@ async function loadQuestionsFromHash() {
 
     const parsed = JSON.parse(new TextDecoder('utf-8').decode(out));
 
-    // Format: {meta:{...}, questions:[...]} YOKI to'g'ridan massiv
     if (Array.isArray(parsed)) {
       questions = parsed;
       meta      = {};
@@ -101,9 +87,6 @@ function showLoader(on) {
   if (el) el.style.display = on ? 'flex' : 'none';
 }
 
-// ════════════════════════════════════════════════
-// INIT
-// ════════════════════════════════════════════════
 function initTest() {
   if (!questions.length) {
     document.getElementById('qtxt').textContent = '❌ Savollar topilmadi!';
@@ -113,7 +96,6 @@ function initTest() {
   score   = 0;
   current = 0;
 
-  // Sarlavha
   const SUBJ = { onatili:'📚 Ona tili', adabiyot:'📖 Adabiyot' };
   const DIFF = { easy:'🟢 Oson', medium:"🟡 O'rta", hard:'🔴 Qiyin' };
   const title = SUBJ[meta.subject] || '📚 Test';
@@ -123,27 +105,23 @@ function initTest() {
   const subEl = document.getElementById('hdr-sub');
   if (subEl) subEl.textContent = (meta.category || '') + sub + (diff ? ' · ' + diff : '');
 
-  // Telegram sarlavha rangi
   if (tg) {
-    tg.setHeaderColor?.('#0a0e1a');
-    tg.setBackgroundColor?.('#0a0e1a');
+    tg.setHeaderColor?.('#0f1523');
+    tg.setBackgroundColor?.('#0f1523');
   }
 
   buildGrid();
   renderQuestion(0);
-  document.getElementById('test-screen').style.display  = 'block';
+  document.getElementById('test-screen').style.display   = 'block';
   document.getElementById('result-screen').style.display = 'none';
 }
 
-// ════════════════════════════════════════════════
-// GRID (savollar paneli)
-// ════════════════════════════════════════════════
 function buildGrid() {
   const g = document.getElementById('grid');
   g.innerHTML = '';
   questions.forEach((_, i) => {
     const btn       = document.createElement('button');
-    btn.className   = 'gbtn' + (i === 0 ? ' current' : '');
+    btn.className   = 'gbtn' + (i === 0 ? ' cur' : '');
     btn.id          = 'gb-' + i;
     btn.textContent = i + 1;
     btn.onclick     = () => jumpTo(i);
@@ -164,46 +142,36 @@ function updateGrid() {
 }
 
 function jumpTo(i) {
-  // Faqat javob berilmagan savollarga o'tish mumkin
   if (answers[i] !== null) return;
   current = i;
   renderQuestion(i);
 }
 
-// ════════════════════════════════════════════════
-// SAVOL RENDER
-// ════════════════════════════════════════════════
 function renderQuestion(i) {
   answered = false;
   const q     = questions[i];
   const total = questions.length;
-
-  // Matn (minimal yoki to'liq format)
   const qText = q.t || q.question_text || '';
 
-  // Progress
   const pct = Math.round((i + 1) / total * 100);
   document.getElementById('prg-fill').style.width  = pct + '%';
   document.getElementById('prg-label').textContent = `${i + 1} / ${total}`;
   const pctEl = document.getElementById('prg-pct');
   if (pctEl) pctEl.textContent = pct + '%';
-  document.getElementById('hdr-score').textContent    = score + ' ball';
+  document.getElementById('hdr-score').textContent = score + ' ball';
 
-  // Savol
-  document.getElementById('qnum').textContent  = `SAVOL ${i + 1}`;
+  document.getElementById('qnum').textContent = `SAVOL ${i + 1}`;
   document.getElementById('qtxt').textContent = qText;
 
-  // Rasm
   const imgEl  = document.getElementById('qimg');
   const imgSrc = q.img || '';
   imgEl.style.display = imgSrc ? 'block' : 'none';
   if (imgSrc) imgEl.src = imgSrc;
 
-  // Variantlar
-  const opts   = document.getElementById('opts');
+  const opts  = document.getElementById('opts');
   opts.innerHTML = '';
-  const LBLS   = ['A', 'B', 'C', 'D'];
-  const TEXTS  = [q.a||'', q.b||'', q.c||'', q.d||''];
+  const LBLS  = ['A', 'B', 'C', 'D'];
+  const TEXTS = [q.a||'', q.b||'', q.c||'', q.d||''];
 
   LBLS.forEach((lbl, idx) => {
     const div = document.createElement('div');
@@ -214,23 +182,18 @@ function renderQuestion(i) {
     opts.appendChild(div);
   });
 
-  // Feedback yashirish
   const fb = document.getElementById('fb');
   fb.className     = 'fb';
   fb.style.display = 'none';
   fb.innerHTML     = '';
 
-  // Tugmalar
   document.getElementById('btn-skip').style.display = 'inline-flex';
-  document.getElementById('btn-next').style.display   = 'none';
-  document.getElementById('btn-end').style.display = 'none';
+  document.getElementById('btn-next').style.display = 'none';
+  document.getElementById('btn-end').style.display  = 'none';
 
   updateGrid();
 }
 
-// ════════════════════════════════════════════════
-// VARIANT TANLASH
-// ════════════════════════════════════════════════
 function selectOption(label) {
   if (answered) return;
   answered = true;
@@ -239,26 +202,23 @@ function selectOption(label) {
   const correct = q.ok || q.correct_answer || '';
   const isOk    = label === correct;
 
-  // Barcha variantlarni o'chirish
   document.querySelectorAll('.opt').forEach(o => {
     o.classList.add('off');
     o.onclick = null;
   });
 
-  // Ranglar
   document.getElementById('opt-' + label).classList.add(isOk ? 'correct' : 'wrong');
   if (!isOk) document.getElementById('opt-' + correct)?.classList.add('hint');
 
-  // Holat yangilash
   answers[current] = isOk ? 'correct' : 'wrong';
   if (isOk) score++;
   document.getElementById('hdr-score').textContent = score + ' ball';
 
   // Feedback + yechim linki
-  const TEXTS      = { A: q.a, B: q.b, C: q.c, D: q.d };
-  const fb         = document.getElementById('fb');
+  const TEXTS       = { A: q.a, B: q.b, C: q.c, D: q.d };
+  const fb          = document.getElementById('fb');
   const solutionUrl = meta.solution_url || '';
-  const linkHtml   = solutionUrl
+  const linkHtml    = solutionUrl
     ? `<br><a href="${solutionUrl}" target="_blank" style="color:inherit;opacity:0.85;font-size:12px;text-decoration:underline;">📹 Yechimni ko'rish</a>`
     : '';
 
@@ -271,12 +231,11 @@ function selectOption(label) {
     fb.innerHTML = `❌ Noto'g'ri! To'g'ri: <b>${correct}) ${TEXTS[correct] || ''}</b>${linkHtml}`;
   }
 
-  // Keyingi tugma
   document.getElementById('btn-skip').style.display = 'none';
-  const isLast = current === questions.length - 1;
+  const isLast  = current === questions.length - 1;
   const allDone = answers.every(a => a !== null);
   if (allDone || isLast) {
-    document.getElementById('btn-finish').style.display = 'inline-flex';
+    document.getElementById('btn-end').style.display = 'inline-flex';
   } else {
     document.getElementById('btn-next').style.display = 'inline-flex';
   }
@@ -285,9 +244,6 @@ function selectOption(label) {
   tg?.HapticFeedback?.impactOccurred(isOk ? 'medium' : 'heavy');
 }
 
-// ════════════════════════════════════════════════
-// O'TKAZISH / KEYINGI
-// ════════════════════════════════════════════════
 function skipQuestion() {
   answers[current] = 'skip';
   updateGrid();
@@ -306,16 +262,12 @@ function findNext(from) {
   for (let i = from; i < questions.length; i++) {
     if (answers[i] === null) return i;
   }
-  // Boshidan ham izlash (o'tkazilgan savollar)
   for (let i = 0; i < from; i++) {
     if (answers[i] === null) return i;
   }
   return -1;
 }
 
-// ════════════════════════════════════════════════
-// NATIJA EKRANI
-// ════════════════════════════════════════════════
 function showResult() {
   const total   = questions.length;
   const correct = answers.filter(a => a === 'correct').length;
@@ -326,23 +278,21 @@ function showResult() {
   document.getElementById('test-screen').style.display   = 'none';
   document.getElementById('result-screen').style.display = 'flex';
 
-  // Baho
   const grades = [
-    [90, '🏆', "A'lo (5)", '#22c55e'],
-    [70, '🎉', 'Yaxshi (4)', '#3b82f6'],
-    [50, '📚', 'Qoniqarli (3)', '#f59e0b'],
-    [0,  '😔', 'Qoniqarsiz (2)', '#ef4444'],
+    [90, '🏆', "A'lo (5)"],
+    [70, '🎉', 'Yaxshi (4)'],
+    [50, '📚', 'Qoniqarli (3)'],
+    [0,  '😔', 'Qoniqarsiz (2)'],
   ];
-  const [, emoji, grade, color] = grades.find(([min]) => pct >= min);
+  const [, emoji, grade] = grades.find(([min]) => pct >= min);
 
-  document.getElementById('r-emoji').textContent  = emoji;
-  document.getElementById('r-grade').textContent  = grade;
-  document.getElementById('r-score').textContent  = pct + '%';
-  document.getElementById('r-correct').textContent     = correct;
-  document.getElementById('r-wrong').textContent       = wrong;
-  document.getElementById('r-skip').textContent        = skip;
+  document.getElementById('r-emoji').textContent   = emoji;
+  document.getElementById('r-grade').textContent   = grade;
+  document.getElementById('r-score').textContent   = pct + '%';
+  document.getElementById('r-correct').textContent = correct;
+  document.getElementById('r-wrong').textContent   = wrong;
+  document.getElementById('r-skip').textContent    = skip;
 
-  // Natija gridi
   const rg = document.getElementById('result-grid');
   rg.innerHTML = '';
   const colMap = { correct:'ok', wrong:'err', skip:'skp' };
@@ -353,7 +303,6 @@ function showResult() {
     rg.appendChild(d);
   });
 
-  // Yuborish tugmasi
   if (tg) {
     tg.MainButton.setText('📤 Natijani yuborish');
     tg.MainButton.show();
@@ -362,9 +311,6 @@ function showResult() {
   tg?.HapticFeedback?.notificationOccurred('success');
 }
 
-// ════════════════════════════════════════════════
-// NATIJA YUBORISH → BOT
-// ════════════════════════════════════════════════
 function sendResult() {
   const total   = questions.length;
   const correct = answers.filter(a => a === 'correct').length;
@@ -378,7 +324,6 @@ function sendResult() {
     skip,
     total,
     score:          pct,
-    // Meta — bot tomonida natijani to'g'ri saqlash uchun
     subject:        meta.subject        || 'onatili',
     category:       meta.category       || 'aralash',
     subcategory:    meta.subcategory    || null,
@@ -393,15 +338,9 @@ function sendResult() {
   }
 }
 
-// ════════════════════════════════════════════════
-// GLOBAL — HTML inline onclick uchun
-// ════════════════════════════════════════════════
 window.skipQuestion = skipQuestion;
 window.nextQuestion = nextQuestion;
 window.showResult   = showResult;
 window.sendResult   = sendResult;
 
-// ════════════════════════════════════════════════
-// START
-// ════════════════════════════════════════════════
 loadQuestionsFromHash();
