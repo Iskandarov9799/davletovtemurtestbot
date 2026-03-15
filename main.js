@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════
-// TELEGRAM WEB APP
+// TELEGRAM WEB APP — Milliy sertifikat qo'llab-quvvatlaydi
 // ════════════════════════════════════════════════
 const tg = window.Telegram?.WebApp;
 if (tg) {
@@ -8,20 +8,21 @@ if (tg) {
   tg.disableClosingConfirmation?.();
 }
 
-let questions = [];
-let answers   = [];
-let current   = 0;
-let score     = 0;
-let answered  = false;
-let meta      = {};
+let questions   = [];
+let answers     = [];   // 'correct'|'wrong'|'skip'|{w1:'...', w2:'...'}|null
+let current     = 0;
+let score       = 0;
+let answered    = false;
+let meta        = {};
 
 const DEMO = [
-  { id:1,  t:"Fe'lning necha zamonlari bor?",            a:"2 ta",    b:"3 ta",    c:"4 ta",   d:"5 ta",              ok:"B", img:"" },
-  { id:2,  t:"Qaysi so'z olmosh turkumiga kiradi?",      a:"kitob",   b:"men",     c:"yaxshi", d:"yugurmoq",          ok:"B", img:"" },
-  { id:3,  t:"O'zbek tilida unli tovushlar soni nechta?",a:"5",       b:"6",       c:"7",      d:"8",                 ok:"B", img:"" },
-  { id:4,  t:"Ko'plik qo'shimchasi qaysi?",              a:"-ning",   b:"-lar",    c:"-ga",    d:"-dan",              ok:"B", img:"" },
-  { id:5,  t:"Antonim nima?",                            a:"Ma'nodosh so'zlar", b:"Qarama-qarshi ma'noli so'zlar", c:"Shakldosh so'zlar", d:"Ko'p ma'noli so'zlar", ok:"B", img:"" },
+  { id:1, t:"Fe'lning necha zamonlari bor?", a:"2 ta", b:"3 ta", c:"4 ta", d:"5 ta", ok:"B", img:"", type:"choice" },
+  { id:2, t:"Qaysi so'z olmosh turkumiga kiradi?", a:"kitob", b:"men", c:"yaxshi", d:"yugurmoq", ok:"B", img:"", type:"choice" },
 ];
+
+// ══════════════════════════════════════════════
+// YUKLASH
+// ══════════════════════════════════════════════
 
 async function loadQuestionsFromHash() {
   showLoader(true);
@@ -29,9 +30,9 @@ async function loadQuestionsFromHash() {
   const hash   = params.get('data') || window.location.hash.slice(1);
 
   if (!hash) {
-    console.warn('Data yo\'q — demo ishlatiladi');
+    console.warn('Data yo\'q — demo');
     questions = DEMO;
-    meta      = { subject:'onatili', category:'aralash', difficulty:'easy', is_attestation:false };
+    meta      = { subject:'onatili', category:'aralash', is_attestation:false };
     initTest();
     showLoader(false);
     return;
@@ -41,40 +42,28 @@ async function loadQuestionsFromHash() {
     const b64    = hash.replace(/-/g, '+').replace(/_/g, '/');
     const binary = atob(b64);
     const bytes  = Uint8Array.from(binary, c => c.charCodeAt(0));
-
     const ds     = new DecompressionStream('deflate');
     const writer = ds.writable.getWriter();
     const reader = ds.readable.getReader();
     writer.write(bytes);
     writer.close();
-
     const chunks = [];
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
     }
-
     const total = chunks.reduce((s, c) => s + c.length, 0);
     const out   = new Uint8Array(total);
     let   off   = 0;
     for (const c of chunks) { out.set(c, off); off += c.length; }
-
     const parsed = JSON.parse(new TextDecoder('utf-8').decode(out));
-
-    if (Array.isArray(parsed)) {
-      questions = parsed;
-      meta      = {};
-    } else {
-      questions = parsed.questions || parsed;
-      meta      = parsed.meta      || {};
-    }
-
+    questions = Array.isArray(parsed) ? parsed : (parsed.questions || parsed);
+    meta      = Array.isArray(parsed) ? {} : (parsed.meta || {});
     console.log(`✅ ${questions.length} ta savol yuklandi`, meta);
     initTest();
-
   } catch (e) {
-    console.error('Hash xatosi:', e);
+    console.error('Xato:', e);
     questions = DEMO;
     meta      = {};
     initTest();
@@ -87,6 +76,10 @@ function showLoader(on) {
   if (el) el.style.display = on ? 'flex' : 'none';
 }
 
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+
 function initTest() {
   if (!questions.length) {
     document.getElementById('qtxt').textContent = '❌ Savollar topilmadi!';
@@ -97,13 +90,9 @@ function initTest() {
   current = 0;
 
   const SUBJ = { onatili:'📚 Ona tili', adabiyot:'📖 Adabiyot' };
-  const DIFF = { easy:'🟢 Oson', medium:"🟡 O'rta", hard:'🔴 Qiyin' };
-  const title = SUBJ[meta.subject] || '📚 Test';
-  const sub   = meta.subcategory ? ` › ${meta.subcategory}` : '';
-  const diff  = DIFF[meta.difficulty] || '';
-  document.getElementById('hdr-title').textContent = title;
+  document.getElementById('hdr-title').textContent = SUBJ[meta.subject] || '📚 Test';
   const subEl = document.getElementById('hdr-sub');
-  if (subEl) subEl.textContent = (meta.category || '') + sub + (diff ? ' · ' + diff : '');
+  if (subEl) subEl.textContent = meta.category || '';
 
   if (tg) {
     tg.setHeaderColor?.('#0f1523');
@@ -116,28 +105,35 @@ function initTest() {
   document.getElementById('result-screen').style.display = 'none';
 }
 
+// ══════════════════════════════════════════════
+// GRID
+// ══════════════════════════════════════════════
+
 function buildGrid() {
   const g = document.getElementById('grid');
   g.innerHTML = '';
-  questions.forEach((_, i) => {
+  questions.forEach((q, i) => {
     const btn       = document.createElement('button');
     btn.className   = 'gbtn' + (i === 0 ? ' cur' : '');
     btn.id          = 'gb-' + i;
     btn.textContent = i + 1;
-    btn.onclick     = () => jumpTo(i);
+    // Yozma savollar boshqa rangda
+    if (isWritten(q)) btn.classList.add('written');
+    btn.onclick = () => jumpTo(i);
     g.appendChild(btn);
   });
 }
 
 function updateGrid() {
-  questions.forEach((_, i) => {
+  questions.forEach((q, i) => {
     const btn = document.getElementById('gb-' + i);
     if (!btn) return;
-    btn.className = 'gbtn';
+    btn.className = 'gbtn' + (isWritten(q) ? ' written' : '');
     if      (i === current)            btn.classList.add('cur');
     else if (answers[i] === 'correct') btn.classList.add('ok');
     else if (answers[i] === 'wrong')   btn.classList.add('err');
     else if (answers[i] === 'skip')    btn.classList.add('skp');
+    else if (answers[i] && typeof answers[i] === 'object') btn.classList.add('ok');
   });
 }
 
@@ -147,11 +143,18 @@ function jumpTo(i) {
   renderQuestion(i);
 }
 
+// ══════════════════════════════════════════════
+// SAVOL RENDER
+// ══════════════════════════════════════════════
+
+function isWritten(q) {
+  return q.type === 'written' || q.qtype === 'written';
+}
+
 function renderQuestion(i) {
   answered = false;
   const q     = questions[i];
   const total = questions.length;
-  const qText = q.t || q.question_text || '';
 
   const pct = Math.round((i + 1) / total * 100);
   document.getElementById('prg-fill').style.width  = pct + '%';
@@ -159,20 +162,43 @@ function renderQuestion(i) {
   const pctEl = document.getElementById('prg-pct');
   if (pctEl) pctEl.textContent = pct + '%';
   document.getElementById('hdr-score').textContent = score + ' ball';
-
   document.getElementById('qnum').textContent = `SAVOL ${i + 1}`;
-  document.getElementById('qtxt').textContent = qText;
+  document.getElementById('qtxt').textContent = q.t || q.question_text || '';
 
-  const imgEl  = document.getElementById('qimg');
+  const imgEl = document.getElementById('qimg');
   const imgSrc = q.img || '';
   imgEl.style.display = imgSrc ? 'block' : 'none';
   if (imgSrc) imgEl.src = imgSrc;
 
-  const opts  = document.getElementById('opts');
+  const fb = document.getElementById('fb');
+  fb.className = 'fb';
+  fb.style.display = 'none';
+  fb.innerHTML = '';
+
+  document.getElementById('btn-skip').style.display = 'inline-flex';
+  document.getElementById('btn-next').style.display = 'none';
+  document.getElementById('btn-finish').style.display = 'none';
+
+  if (isWritten(q)) {
+    renderWrittenQuestion(q);
+  } else {
+    renderChoiceQuestion(q);
+  }
+
+  updateGrid();
+}
+
+function renderChoiceQuestion(q) {
+  const opts = document.getElementById('opts');
   opts.innerHTML = '';
+  opts.style.display = 'block';
+
+  // Yozma qism konteynerini yashirish
+  const wc = document.getElementById('written-container');
+  if (wc) wc.style.display = 'none';
+
   const LBLS  = ['A', 'B', 'C', 'D'];
   const TEXTS = [q.a||'', q.b||'', q.c||'', q.d||''];
-
   LBLS.forEach((lbl, idx) => {
     const div = document.createElement('div');
     div.className = 'opt';
@@ -181,18 +207,47 @@ function renderQuestion(i) {
     div.onclick   = () => selectOption(lbl);
     opts.appendChild(div);
   });
-
-  const fb = document.getElementById('fb');
-  fb.className     = 'fb';
-  fb.style.display = 'none';
-  fb.innerHTML     = '';
-
-  document.getElementById('btn-skip').style.display = 'inline-flex';
-  document.getElementById('btn-next').style.display = 'none';
-  document.getElementById('btn-finish').style.display  = 'none';
-
-  updateGrid();
 }
+
+function renderWrittenQuestion(q) {
+  const opts = document.getElementById('opts');
+  opts.innerHTML = '';
+  opts.style.display = 'none';
+
+  // Yozma javob konteyneri
+  let wc = document.getElementById('written-container');
+  if (!wc) {
+    wc = document.createElement('div');
+    wc.id = 'written-container';
+    opts.parentNode.insertBefore(wc, opts.nextSibling);
+  }
+  wc.style.display = 'block';
+
+  const parts = q.parts || q.written_parts || 1;
+
+  wc.innerHTML = '';
+
+  if (parts === 1) {
+    wc.innerHTML = `
+      <div class="written-hint">✏️ Javobingizni yozing:</div>
+      <textarea id="written-ans-1" class="written-textarea" placeholder="Bu yerga javob yozing..." rows="4"></textarea>
+      <button class="written-submit-btn" onclick="submitWritten()">✅ Javobni tekshirish</button>
+    `;
+  } else {
+    wc.innerHTML = `
+      <div class="written-hint">✏️ Ikkita qism uchun javob yozing:</div>
+      <div class="written-part-label">1-qism:</div>
+      <textarea id="written-ans-1" class="written-textarea" placeholder="1-qism javobi..." rows="3"></textarea>
+      <div class="written-part-label">2-qism:</div>
+      <textarea id="written-ans-2" class="written-textarea" placeholder="2-qism javobi..." rows="3"></textarea>
+      <button class="written-submit-btn" onclick="submitWritten()">✅ Javobni tekshirish</button>
+    `;
+  }
+}
+
+// ══════════════════════════════════════════════
+// VARIANT TANLASH
+// ══════════════════════════════════════════════
 
 function selectOption(label) {
   if (answered) return;
@@ -214,7 +269,6 @@ function selectOption(label) {
   if (isOk) score++;
   document.getElementById('hdr-score').textContent = score + ' ball';
 
-  // Feedback + yechim linki
   const TEXTS       = { A: q.a, B: q.b, C: q.c, D: q.d };
   const fb          = document.getElementById('fb');
   const solutionUrl = meta.solution_url || '';
@@ -244,6 +298,101 @@ function selectOption(label) {
   tg?.HapticFeedback?.impactOccurred(isOk ? 'medium' : 'heavy');
 }
 
+// ══════════════════════════════════════════════
+// YOZMA JAVOB TEKSHIRISH
+// ══════════════════════════════════════════════
+
+function checkKeywords(userText, keywordsStr) {
+  if (!keywordsStr) return true; // kalit so'z yo'q = har qanday javob to'g'ri
+  const keywords = keywordsStr.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+  if (!keywords.length) return true;
+  const userLower = userText.toLowerCase();
+  // Kamida 1 ta kalit so'z bo'lsa to'g'ri
+  return keywords.some(kw => userLower.includes(kw));
+}
+
+function submitWritten() {
+  if (answered) return;
+
+  const q     = questions[current];
+  const parts = q.parts || q.written_parts || 1;
+
+  const ans1El = document.getElementById('written-ans-1');
+  const ans1   = ans1El ? ans1El.value.trim() : '';
+
+  if (!ans1) {
+    ans1El?.classList.add('shake');
+    setTimeout(() => ans1El?.classList.remove('shake'), 500);
+    return;
+  }
+
+  answered = true;
+
+  // Tekstareani o'qib bo'lmas qiling
+  if (ans1El) { ans1El.disabled = true; }
+
+  let ans2 = '';
+  const ans2El = document.getElementById('written-ans-2');
+  if (ans2El) { ans2 = ans2El.value.trim(); ans2El.disabled = true; }
+
+  // Submit tugmasini yashirish
+  const submitBtn = document.querySelector('.written-submit-btn');
+  if (submitBtn) submitBtn.style.display = 'none';
+
+  // Tekshirish
+  const kw1 = q.kw1 || q.keywords_1 || '';
+  const kw2 = q.kw2 || q.keywords_2 || '';
+
+  const ok1 = checkKeywords(ans1, kw1);
+  const ok2 = parts < 2 ? true : checkKeywords(ans2, kw2);
+  const allOk = ok1 && ok2;
+
+  // Grid uchun
+  answers[current] = { w1: ans1, w2: ans2, ok1, ok2 };
+  if (allOk) score++;
+  document.getElementById('hdr-score').textContent = score + ' ball';
+
+  // Feedback
+  const fb = document.getElementById('fb');
+  fb.style.display = 'flex';
+
+  let fbHtml = '';
+  if (parts === 1) {
+    if (ok1) {
+      fbHtml = `✅ <b>To'g'ri!</b> Javobingizda kalit so'z topildi.`;
+      fb.className = 'fb ok';
+    } else {
+      const hint = kw1 ? `<br>💡 Kalit so'z: <b>${kw1.split(',')[0].trim()}</b>` : '';
+      fbHtml = `❌ <b>Noto'g'ri.</b>${hint}`;
+      fb.className = 'fb err';
+    }
+  } else {
+    const icon1 = ok1 ? '✅' : '❌';
+    const icon2 = ok2 ? '✅' : '❌';
+    const hint1 = (!ok1 && kw1) ? ` (kalit so'z: <b>${kw1.split(',')[0].trim()}</b>)` : '';
+    const hint2 = (!ok2 && kw2) ? ` (kalit so'z: <b>${kw2.split(',')[0].trim()}</b>)` : '';
+    fbHtml = `${icon1} 1-qism${hint1}<br>${icon2} 2-qism${hint2}`;
+    fb.className = allOk ? 'fb ok' : (ok1 || ok2 ? 'fb partial' : 'fb err');
+  }
+  fb.innerHTML = fbHtml;
+
+  document.getElementById('btn-skip').style.display = 'none';
+  const isLast  = current === questions.length - 1;
+  const allDone = answers.every(a => a !== null);
+  if (allDone || isLast) {
+    document.getElementById('btn-finish').style.display = 'inline-flex';
+  } else {
+    document.getElementById('btn-next').style.display = 'inline-flex';
+  }
+
+  updateGrid();
+  tg?.HapticFeedback?.notificationOccurred(allOk ? 'success' : 'error');
+}
+
+// ══════════════════════════════════════════════
+// NAVIGATSIYA
+// ══════════════════════════════════════════════
+
 function skipQuestion() {
   answers[current] = 'skip';
   updateGrid();
@@ -268,12 +417,26 @@ function findNext(from) {
   return -1;
 }
 
+// ══════════════════════════════════════════════
+// NATIJA
+// ══════════════════════════════════════════════
+
 function showResult() {
   const total   = questions.length;
-  const correct = answers.filter(a => a === 'correct').length;
-  const wrong   = answers.filter(a => a === 'wrong').length;
-  const skip    = answers.filter(a => a === 'skip' || a === null).length;
-  const pct     = total > 0 ? Math.round(correct / total * 100) : 0;
+  let correct   = 0, wrong = 0, skip = 0, writtenCorrect = 0, writtenWrong = 0;
+
+  answers.forEach((a, i) => {
+    if (a === 'correct')       correct++;
+    else if (a === 'wrong')    wrong++;
+    else if (a === 'skip' || a === null) skip++;
+    else if (typeof a === 'object') {
+      const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
+      if (allOk) { correct++; writtenCorrect++; }
+      else       { wrong++;   writtenWrong++;   }
+    }
+  });
+
+  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
 
   document.getElementById('test-screen').style.display   = 'none';
   document.getElementById('result-screen').style.display = 'flex';
@@ -298,7 +461,12 @@ function showResult() {
   const colMap = { correct:'ok', wrong:'err', skip:'skp' };
   answers.forEach((a, i) => {
     const d = document.createElement('div');
-    d.className   = 'gbtn ' + (colMap[a] || '');
+    if (typeof a === 'object' && a !== null) {
+      const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
+      d.className = 'gbtn written ' + (allOk ? 'ok' : 'err');
+    } else {
+      d.className = 'gbtn ' + (colMap[a] || '');
+    }
     d.textContent = i + 1;
     rg.appendChild(d);
   });
@@ -313,17 +481,22 @@ function showResult() {
 
 function sendResult() {
   const total   = questions.length;
-  const correct = answers.filter(a => a === 'correct').length;
-  const wrong   = answers.filter(a => a === 'wrong').length;
-  const skip    = answers.filter(a => a === 'skip' || a === null).length;
-  const pct     = total > 0 ? Math.round(correct / total * 100) : 0;
+  let correct   = 0, wrong = 0, skip = 0;
+
+  answers.forEach((a, i) => {
+    if (a === 'correct') correct++;
+    else if (a === 'wrong') wrong++;
+    else if (a === 'skip' || a === null) skip++;
+    else if (typeof a === 'object') {
+      const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
+      if (allOk) correct++; else wrong++;
+    }
+  });
+
+  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
 
   const payload = JSON.stringify({
-    correct,
-    wrong,
-    skip,
-    total,
-    score:          pct,
+    correct, wrong, skip, total, score: pct,
     subject:        meta.subject        || 'onatili',
     category:       meta.category       || 'aralash',
     subcategory:    meta.subcategory    || null,
@@ -338,9 +511,10 @@ function sendResult() {
   }
 }
 
-window.skipQuestion = skipQuestion;
-window.nextQuestion = nextQuestion;
-window.showResult   = showResult;
-window.sendResult   = sendResult;
+window.skipQuestion  = skipQuestion;
+window.nextQuestion  = nextQuestion;
+window.showResult    = showResult;
+window.sendResult    = sendResult;
+window.submitWritten = submitWritten;
 
 loadQuestionsFromHash();

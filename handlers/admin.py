@@ -171,13 +171,27 @@ from aiogram.types import CallbackQuery
 async def addq_subject(callback: CallbackQuery, state: FSMContext):
     subject = callback.data.split(":")[2]
     await state.update_data(subject=subject)
-    SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
-    await callback.message.edit_text(
-        f"📁 <b>{SUBJ.get(subject)} — Kategoriya tanlang:</b>",
-        reply_markup=addq_category_keyboard(subject),
-        parse_mode="HTML"
-    )
-    await state.set_state(AdminStates.add_category)
+    SUBJ = {
+        'onatili':     '📚 Ona tili',
+        'adabiyot':    '📖 Adabiyot',
+        'attestation': '🎓 Attestatsiya',
+        'milliy':      '🏅 Milliy sertifikat',
+    }
+    if subject in ('attestation', 'milliy'):
+        await state.update_data(category=subject, subcategory=None, is_attestation=True)
+        await callback.message.edit_text(
+            f"📁 <b>{SUBJ.get(subject)}</b>\n\nSavol turini tanlang:",
+            reply_markup=addq_category_keyboard(subject),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.add_is_attest)
+    else:
+        await callback.message.edit_text(
+            f"📁 <b>{SUBJ.get(subject)} — Kategoriya tanlang:</b>",
+            reply_markup=addq_category_keyboard(subject),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.add_category)
     await callback.answer()
 
 # Kategoriya tanlash
@@ -204,27 +218,14 @@ async def addq_category(callback: CallbackQuery, state: FSMContext):
         )
         await state.set_state(AdminStates.add_subcategory)
 
-    elif category == 'attestation':
-        # Atestatsiya — subcategory yo'q, difficulty yo'q
-        await state.update_data(subcategory=None, difficulty=None, is_attestation=True)
-        # order_num so'rash
-        cnt = await count_questions(subject=subject, is_attestation=True)
-        await callback.message.edit_text(
-            f"🎓 <b>Atestatsiya savoli</b>\n\n"
-            f"Hozir {cnt} ta atestatsiya savoli bor.\n"
-            f"Tartib raqamini yozing (masalan: <code>{cnt + 1}</code>):",
-            parse_mode="HTML"
-        )
-        await state.set_state(AdminStates.add_order_num)
-
     else:
-        # aralash, gazallar — qiyinlik kerak
-        await callback.message.edit_text(
-            "🎯 <b>Qiyinlik darajasini tanlang:</b>",
-            reply_markup=addq_difficulty_keyboard(),
-            parse_mode="HTML"
+        # aralash, gazallar, sheriy, badiiy — to'g'ridan rasmga
+        await state.update_data(is_attestation=False, subcategory=None)
+        await callback.message.answer(
+            "📸 Rasm yuboring yoki o'tkazib yuboring:",
+            reply_markup=skip_image_keyboard()
         )
-        await state.set_state(AdminStates.add_difficulty)
+        await state.set_state(AdminStates.add_image)
 
     await callback.answer()
 
@@ -233,25 +234,25 @@ async def addq_category(callback: CallbackQuery, state: FSMContext):
 async def addq_topic(callback: CallbackQuery, state: FSMContext):
     topic = callback.data.split(":")[2]
     await state.update_data(subcategory=topic, is_attestation=False)
-    label = config.ONA_TILI_TOPICS.get(topic, topic)
-    await callback.message.edit_text(
-        f"📌 <b>{label}</b>\n\nQiyinlik darajasini tanlang:",
-        reply_markup=addq_difficulty_keyboard(),
+    label = config.ONA_TILI_BOLIMLAR.get(topic, topic)
+    await callback.message.answer(
+        f"📌 <b>{label}</b>\n\n📸 Rasm yuboring yoki o'tkazib yuboring:",
+        reply_markup=skip_image_keyboard(),
         parse_mode="HTML"
     )
-    await state.set_state(AdminStates.add_difficulty)
+    await state.set_state(AdminStates.add_image)
     await callback.answer()
 
 @router.callback_query(F.data.startswith("addq:grade:"))
 async def addq_grade(callback: CallbackQuery, state: FSMContext):
     grade = callback.data.split(":")[2]
     await state.update_data(subcategory=grade, is_attestation=False)
-    await callback.message.edit_text(
-        f"🏫 <b>{grade}-sinf</b>\n\nQiyinlik darajasini tanlang:",
-        reply_markup=addq_difficulty_keyboard(),
+    await callback.message.answer(
+        f"🏫 <b>{grade}-sinf</b>\n\n📸 Rasm yuboring yoki o'tkazib yuboring:",
+        reply_markup=skip_image_keyboard(),
         parse_mode="HTML"
     )
-    await state.set_state(AdminStates.add_difficulty)
+    await state.set_state(AdminStates.add_image)
     await callback.answer()
 
 # Qiyinlik tanlash
@@ -344,6 +345,34 @@ async def addq_d(message: Message, state: FSMContext):
     )
     await state.set_state(AdminStates.add_correct)
 
+# Savol turi tanlash (attestation/milliy uchun)
+@router.callback_query(F.data.startswith("addq:qtype:"))
+async def addq_qtype(callback: CallbackQuery, state: FSMContext):
+    qtype   = callback.data.split(":")[2]
+    data    = await state.get_data()
+    subject = data.get('subject', 'onatili')
+    LABELS  = {'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy sertifikat'}
+    label   = LABELS.get(subject, subject)
+
+    if qtype == 'choice':
+        await state.update_data(question_type='choice', written_parts=1)
+        cnt = await count_questions(subject=subject, category=subject, is_attestation=True)
+        await callback.message.edit_text(
+            f"{label} — Variantli savol\n\nTartib raqamini yozing (<code>{cnt + 1}</code>):",
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.add_order_num)
+    elif qtype in ('written1', 'written2'):
+        parts = 1 if qtype == 'written1' else 2
+        await state.update_data(question_type='written', written_parts=parts)
+        cnt = await count_questions(subject=subject, category=subject, is_attestation=True)
+        await callback.message.edit_text(
+            f"{label} — Yozma savol ({parts} qism)\n\nTartib raqamini yozing (<code>{cnt + 1}</code>):",
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.add_order_num)
+    await callback.answer()
+
 # To'g'ri javob
 @router.callback_query(F.data.startswith("addq:correct:"))
 async def addq_correct(callback: CallbackQuery, state: FSMContext):
@@ -351,29 +380,33 @@ async def addq_correct(callback: CallbackQuery, state: FSMContext):
     data    = await state.get_data()
     await state.clear()
 
+    subj = data['subject']
+    cat  = data.get('category', subj)  # attestation/milliy uchun category=subject
+
     await add_question(
-        subject        = data['subject'],
-        category       = data['category'],
+        subject        = subj,
+        category       = cat,
         question_text  = data['question_text'],
-        option_a       = data['option_a'],
-        option_b       = data['option_b'],
-        option_c       = data['option_c'],
-        option_d       = data['option_d'],
+        option_a       = data.get('option_a'),
+        option_b       = data.get('option_b'),
+        option_c       = data.get('option_c'),
+        option_d       = data.get('option_d'),
         correct_answer = correct,
         subcategory    = data.get('subcategory'),
-        difficulty     = data.get('difficulty'),
+        difficulty     = None,
         is_attestation = data.get('is_attestation', False),
         order_num      = data.get('order_num'),
         image_file_id  = data.get('image_file_id'),
+        question_type  = data.get('question_type', 'choice'),
+        written_parts  = data.get('written_parts', 1),
     )
 
-    SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
+    SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot',
+             'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy sertifikat'}
     await callback.message.edit_text(
-        f"✅ <b>Savol muvaffaqiyatli qo'shildi!</b>\n\n"
-        f"📚 Fan: {SUBJ.get(data['subject'])}\n"
-        f"📁 Kategoriya: {data['category']}\n"
+        f"✅ <b>Savol qo'shildi!</b>\n\n"
+        f"📚 {SUBJ.get(subj, subj)} | {cat}\n"
         f"🔑 Subcategory: {data.get('subcategory') or '—'}\n"
-        f"🎯 Qiyinlik: {data.get('difficulty') or '—'}\n"
         f"✅ To'g'ri javob: <b>{correct}</b>",
         parse_mode="HTML"
     )
@@ -458,63 +491,209 @@ async def solution_url_info(message: Message):
 async def excel_import_start(message: Message):
     if not is_admin(message): return
 
-    # Shablon yaratib yuborish
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Savollar"
 
-    # Sarlavha
-    headers = [
-        "subject", "category", "subcategory", "difficulty",
-        "is_attestation", "order_num",
-        "question", "a", "b", "c", "d", "correct"
-    ]
-    ws.append(headers)
+    headers = ["subject", "category", "subcategory",
+               "is_attestation", "order_num", "question",
+               "a", "b", "c", "d", "correct",
+               "question_type", "written_parts", "keywords_1", "keywords_2"]
 
-    # Sarlavhalarni qalin qilish
-    from openpyxl.styles import Font, PatternFill
-    for col in range(1, len(headers) + 1):
-        cell = ws.cell(row=1, column=col)
-        cell.font = Font(bold=True)
-        cell.fill = PatternFill("solid", fgColor="4472C4")
-        cell.font = Font(bold=True, color="FFFFFF")
+    hfill   = PatternFill("solid", fgColor="1F4E79")
+    hfill_w = PatternFill("solid", fgColor="7B2D8B")
+    hfont   = Font(bold=True, color="FFFFFF", size=11)
 
-    # Ustun kengligini moslashtirish
-    widths = [10, 12, 14, 12, 14, 10, 50, 25, 25, 25, 25, 10]
+    for i, h in enumerate(headers, 1):
+        cell = ws.cell(1, i)
+        cell.value = h
+        cell.font  = hfont
+        cell.fill  = hfill_w if i >= 12 else hfill
+        cell.alignment = Alignment(horizontal='center')
+
+    widths = [12, 14, 30, 14, 10, 50, 20, 20, 20, 20, 10, 14, 14, 30, 30]
     for i, w in enumerate(widths, 1):
-        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+        ws.column_dimensions[get_column_letter(i)].width = w
 
-    # Misol qatorlar
+    fill_ona   = PatternFill("solid", fgColor="EBF3FB")
+    fill_ada   = PatternFill("solid", fgColor="EBF7EE")
+    fill_att   = PatternFill("solid", fgColor="FFF2CC")
+    fill_mil_v = PatternFill("solid", fgColor="E8F5E9")
+    fill_mil_w = PatternFill("solid", fgColor="FCE4EC")
+
+    # subject, category, subcategory, is_att, order, question, a,b,c,d, correct, qtype, parts, kw1, kw2
     examples = [
-        ["onatili", "mavzu", "fonetika", "easy",   "FALSE", "", "O'zbek tilida nechta unli tovush bor?", "5 ta", "6 ta", "7 ta", "8 ta", "B"],
-        ["onatili", "aralash", "", "medium",         "FALSE", "", "Sinonimlarga misol:", "katta-kichik", "baland-past", "go'zal-chiroyli", "tez-sekin", "C"],
-        ["adabiyot", "sinf", "7", "hard",            "FALSE", "", "Navoiy qaysi asrda yashagan?", "XIV", "XV", "XVI", "XVII", "B"],
-        ["adabiyot", "gazallar", "", "easy",         "FALSE", "", "G'azal necha misradan iborat?", "4", "6", "8", "10", "C"],
-        ["onatili", "attestation", "", "",           "TRUE",  "1", "Fonetika nima?", "So'z haqidagi fan", "Tovush haqidagi fan", "Gap haqidagi fan", "Harf haqidagi fan", "B"],
+        # Ona tili — oddiy savollar
+        ["onatili", "mavzu", "fonetika_tovushlar_tasnifi", "FALSE", None,
+         "O'zbek tilida nechta unli tovush bor?", "5 ta", "6 ta", "7 ta", "8 ta", "B",
+         "choice", 1, None, None],
+        ["onatili", "mavzu", "morfologiya_m_ot", "FALSE", None,
+         "Qaysi so'z ot turkumiga kiradi?", "yugurmoq", "baland", "maktab", "tez", "C",
+         "choice", 1, None, None],
+        ["onatili", "aralash", None, "FALSE", None,
+         "Sintaksis nimani o'rganadi?", "So'z yasalishini", "Gap qurilishini", "Tovushlarni", "So'z ma'nosini", "B",
+         "choice", 1, None, None],
+        # Adabiyot — oddiy savollar
+        ["adabiyot", "sinf", "7_2", "FALSE", None,
+         "Navoiy qaysi asrda yashagan?", "XIV asr", "XV asr", "XVI asr", "XIII asr", "B",
+         "choice", 1, None, None],
+        ["adabiyot", "sheriy", None, "FALSE", None,
+         "Tashbeh nima?", "O'xshatish", "Mubolag'a", "Takror", "Irsoli masal", "A",
+         "choice", 1, None, None],
+        # Attestatsiya — subject="attestation", 1-35 variantli, fan ajratilmaydi
+        ["attestation", "attestation", None, "TRUE", 1,
+         "Fonetika nimani o'rganadi?", "So'z ma'nosini", "Tovush va harflarni", "Gap tuzilishini", "So'z yasalishini", "B",
+         "choice", 1, None, None],
+        ["attestation", "attestation", None, "TRUE", 2,
+         "Navoiy qaysi asrda yashagan?", "XIV asr", "XV asr", "XVI asr", "XIII asr", "B",
+         "choice", 1, None, None],
+        # Milliy sertifikat — subject="milliy", variantli (1-35)
+        ["milliy", "milliy", None, "TRUE", 1,
+         "Fonetika nimani o'rganadi?", "So'z ma'nosini", "Tovush va harflarni", "Gap tuzilishini", "So'z yasalishini", "B",
+         "choice", 1, None, None],
+        ["milliy", "milliy", None, "TRUE", 2,
+         "Navoiy qaysi asrda yashagan?", "XIV asr", "XV asr", "XVI asr", "XIII asr", "B",
+         "choice", 1, None, None],
+        # Milliy sertifikat — yozma 1 qism (36-38)
+        ["milliy", "milliy", None, "TRUE", 36,
+         "Fonetika fanining asosiy vazifasini izohlang.", None, None, None, None, None,
+         "written", 1, "tovush, harflar, talaffuz", None],
+        ["milliy", "milliy", None, "TRUE", 37,
+         "Navoiy ijodining asosiy mavzusini tushuntiring.", None, None, None, None, None,
+         "written", 1, "inson, muhabbat, ma'rifat", None],
+        # Milliy sertifikat — yozma 2 qism (39-44)
+        ["milliy", "milliy", None, "TRUE", 39,
+         "Ot so'z turkumini ta'riflang va misol keltiring.", None, None, None, None, None,
+         "written", 2, "ot, predmet, kim, nima", "misol, qo'shimcha"],
+        ["milliy", "milliy", None, "TRUE", 40,
+         "G'azal janrining xususiyatlarini izohlang.", None, None, None, None, None,
+         "written", 2, "g'azal, bayt, radif, qofiya", "misol, Navoiy"],
     ]
-    for row in examples:
-        ws.append(row)
 
-    # Izohlar varaqasi
+    for i, row_data in enumerate(examples, start=2):
+        subj     = row_data[0]
+        is_yazma = len(row_data) > 11 and row_data[11] == "written"
+        if subj == "milliy" and is_yazma:
+            fill = fill_mil_w
+        elif subj == "milliy":
+            fill = fill_mil_v
+        elif subj == "attestation":
+            fill = fill_att
+        elif subj == "onatili":
+            fill = fill_ona
+        else:
+            fill = fill_ada
+        for j, val in enumerate(row_data, start=1):
+            cell = ws.cell(i, j)
+            cell.value = val
+            cell.fill  = fill
+
+    # Qo'llanma
     ws2 = wb.create_sheet("Qo'llanma")
-    ws2.column_dimensions['A'].width = 20
-    ws2.column_dimensions['B'].width = 50
+    ws2.column_dimensions['A'].width = 36
+    ws2.column_dimensions['B'].width = 60
+
+    hf2    = PatternFill("solid", fgColor="1F4E79")
+    hfont2 = Font(bold=True, color="FFFFFF")
+    blue   = Font(bold=True, color="1F4E79")
+    red    = Font(bold=True, color="C00000")
+    bold   = Font(bold=True)
+
     guide = [
-        ("subject",        "onatili | adabiyot"),
-        ("category",       "mavzu | aralash | sinf | gazallar | attestation"),
-        ("subcategory",    "mavzu uchun: fonetika, leksika, morfologiya, sintaksis, imlo, uslubiyat\nsinf uchun: 5, 6, 7, 8, 9, 10, 11\nboshqalar uchun: bo'sh"),
-        ("difficulty",     "easy | medium | hard  (attestation uchun bo'sh)"),
-        ("is_attestation", "TRUE | FALSE"),
-        ("order_num",      "Faqat attestation uchun tartib raqami (1, 2, 3...), boshqalar uchun bo'sh"),
+        ("SAVOLLAR SHABLONI — ONA TILI VA ADABIYOT BOTI", ""),
+        ("", ""),
+        ("USTUN", "QIYMAT / IZOH"),
+        ("subject",        "onatili | adabiyot | attestation | milliy"),
+        ("category",       "mavzu | aralash | sinf | gazallar | sheriy | badiiy | attestation | milliy"),
+        ("subcategory",    "Pastdagi jadvalga qarang"),
+        ("is_attestation", "FALSE  (attestation/milliy uchun TRUE)"),
+        ("order_num",      "Attestation: 1-35 | Milliy: 1-35 variantli, 36-38 yozma(1q), 39-44 yozma(2q)"),
         ("question",       "Savol matni"),
-        ("a, b, c, d",     "Variant matni"),
-        ("correct",        "To'g'ri javob: A | B | C | D"),
+        ("a / b / c / d",  "Variant matni  (yozma savol uchun bo'sh qoldiring)"),
+        ("correct",        "To'g'ri javob: A|B|C|D  (yozma savol uchun bo'sh)"),
+        ("question_type",  "choice  |  written"),
+        ("written_parts",  "1  yoki  2"),
+        ("keywords_1",     "1-qism kalit so'zlari — vergul bilan: fonetika, tovush, unli"),
+        ("keywords_2",     "2-qism kalit so'zlari — faqat written_parts=2 bo'lsa"),
+        ("", ""),
+        ("ESLATMA: difficulty ustuni yo'q!", ""),
+        ("", ""),
+        ("ATTESTATSIYA", "subject=attestation, category=attestation, fan ajratilmaydi, faqat 1-35 variantli"),
+        ("MILLIY SERTIFIKAT", "subject=milliy, category=milliy, fan ajratilmaydi"),
+        ("  1-35 savol",  "question_type=choice"),
+        ("  36-38 savol", "question_type=written, written_parts=1"),
+        ("  39-44 savol", "question_type=written, written_parts=2"),
+        ("", ""),
+        ("ONA TILI — SUBCATEGORY", ""),
+        ("category = mavzu", ""),
+        ("fonetika",                    "Fonetika (barcha)"),
+        ("fonetika_tovushlar_tasnifi",  "Tovushlar tasnifi"),
+        ("fonetika_tovush_ozgarishi",   "Tovush o'zgarishlari"),
+        ("imlo",                        "Imlo (barcha)"),
+        ("imlo_togri_yozilgan",         "Qaysi so'z to'g'ri yozilgan"),
+        ("imlo_imloviy_xato",           "Gapda imloviy xato"),
+        ("morfemika",                   "Morfemika (barcha)"),
+        ("morfemika_qoshimchalar",      "Qo'shimchalar tasnifi"),
+        ("morfemika_tub_yasama",        "Tub va yasama so'zlar"),
+        ("leksikologiya",               "Leksikologiya (barcha)"),
+        ("leksikologiya_oz_kochma",     "O'z va ko'chma ma'no"),
+        ("leksikologiya_omonimlik",     "Omonimlik"),
+        ("leksikologiya_paronimlik",    "Paronimlik"),
+        ("leksikologiya_ibora",         "Ibora va tasviriy ifodalar"),
+        ("leksikologiya_lugatlar",      "Lug'atlardan"),
+        ("morfologiya_m",               "Morfologiya mustaqil (barcha)"),
+        ("morfologiya_m_ot",            "Ot"), ("morfologiya_m_sifat", "Sifat"),
+        ("morfologiya_m_son",           "Son"), ("morfologiya_m_olmosh", "Olmosh"),
+        ("morfologiya_m_ravish",        "Ravish"), ("morfologiya_m_fel", "Fe'l"),
+        ("morfologiya_y",               "Morfologiya yordamchi (barcha)"),
+        ("morfologiya_y_boglovchilar",  "Bog'lovchilar"),
+        ("morfologiya_y_komakchilar",   "Ko'makchilar"),
+        ("morfologiya_y_yuklamalar",    "Yuklamalar"),
+        ("morfologiya_a",               "Alohida so'z turkumlari"),
+        ("sintaksis",                   "Sintaksis (barcha)"),
+        ("sintaksis_sozlar_boglashi",   "So'zlarning bog'lanishi"),
+        ("sintaksis_gap_bolaklari",     "Gap bo'laklari"),
+        ("sintaksis_qoshma_gaplar",     "Qo'shma gaplar"),
+        ("matnlar",                     "Matnlar (barcha)"),
+        ("matnlar_ilmiy_matn",          "Ilmiy matnlar"),
+        ("matnlar_badiiy_matn",         "Badiiy matnlar"),
+        ("punktuatsiya",                "Punktuatsiya"),
+        ("uslubiyat",                   "Uslubiyat (barcha)"),
+        ("uslubiyat_qoshimchalar_uslubiyat", "Qo'shimchalar uslubiyati"),
+        ("uslubiyat_sozlar_uslubiyat",  "So'zlar uslubiyati"),
+        ("category = aralash",          "subcategory = bo'sh"),
+        ("", ""),
+        ("ADABIYOT — SUBCATEGORY", ""),
+        ("category = sinf", ""),
+        ("5 / 5_1 / 5_2 / 5_3 / 5_4",  "5-sinf barcha / bob bo'yicha"),
+        ("6...10 uchun ham xuddi shunday", ""),
+        ("11 / 11_1 / 11_2 / 11_3 / 11_4", "11-sinf"),
+        ("category = gazallar",  "subcategory = bo'sh"),
+        ("category = sheriy",    "subcategory = bo'sh"),
+        ("category = badiiy",    "subcategory = bo'sh"),
+        ("category = aralash",   "subcategory = bo'sh"),
     ]
-    ws2.append(["Ustun", "Qiymatlar"])
-    ws2.cell(1,1).font = Font(bold=True)
-    ws2.cell(1,2).font = Font(bold=True)
-    for row in guide:
-        ws2.append(list(row))
+
+    for i, (col_a, col_b) in enumerate(guide, start=1):
+        ca = ws2.cell(i, 1, col_a)
+        cb = ws2.cell(i, 2, col_b)
+        if i == 1:
+            ca.font = Font(bold=True, size=13, color="1F4E79")
+        elif col_a == "USTUN":
+            ca.fill = hf2; ca.font = hfont2
+            cb.fill = hf2; cb.font = hfont2
+        elif col_a in ("ONA TILI — SUBCATEGORY", "ADABIYOT — SUBCATEGORY",
+                       "ATTESTATSIYA", "MILLIY SERTIFIKAT"):
+            ca.font = blue
+        elif "ESLATMA" in col_a:
+            ca.font = red
+        elif col_a.startswith("category ="):
+            ca.font = bold
+        ca.alignment = Alignment(wrap_text=True, vertical='top')
+        cb.alignment = Alignment(wrap_text=True, vertical='top')
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -524,14 +703,16 @@ async def excel_import_start(message: Message):
         document=BufferedInputFile(buf.read(), filename="savollar_shablon.xlsx"),
         caption=(
             "📋 <b>Excel shablon</b>\n\n"
-            "1️⃣ Shu faylni yuklab oling\n"
-            "2️⃣ Savollarni to'ldiring\n"
-            "3️⃣ Faylni botga yuboring\n\n"
-            "📌 <b>Qo'llanma</b> varaqasini ham o'qing!"
+            "🔵 Ona tili savollar\n"
+            "🟢 Adabiyot savollar\n"
+            "🟡 Attestatsiya (1-35 variantli, fan ajratilmaydi)\n"
+            "🟩 Milliy sertifikat variantli (1-35)\n"
+            "🩷 Milliy sertifikat yozma (36-44)\n\n"
+            "1️⃣ Yuklab oling  2️⃣ To'ldiring  3️⃣ Yuboring\n"
+            "📌 <b>Qo'llanma</b> varaqasini o'qing!"
         ),
         parse_mode="HTML"
     )
-
 @router.message(F.document)
 async def excel_import_upload(message: Message):
     if not is_admin(message): return
@@ -553,8 +734,8 @@ async def excel_import_upload(message: Message):
     wb = openpyxl.load_workbook(buf)
     ws = wb.active
 
-    VALID_SUBJECTS    = {'onatili', 'adabiyot'}
-    VALID_CATEGORIES  = {'mavzu', 'aralash', 'sinf', 'gazallar', 'attestation'}
+    VALID_SUBJECTS    = {'onatili', 'adabiyot', 'attestation', 'milliy'}
+    VALID_CATEGORIES  = {'mavzu', 'aralash', 'sinf', 'gazallar', 'sheriy', 'badiiy', 'attestation', 'milliy'}
     VALID_DIFFICULTIES= {'easy', 'medium', 'hard', ''}
     VALID_CORRECT     = {'A', 'B', 'C', 'D'}
 

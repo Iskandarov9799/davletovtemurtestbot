@@ -1,3 +1,10 @@
+"""
+To'lov tizimi — yangi:
+  once    — 3,500 so'm (bir martalik, bitta test)
+  daily   — 35,000 so'm (24 soat barcha testlar)
+  monthly — 100,000 so'm (30 kun barcha testlar)
+  attestation — bir martalik atestatsiya
+"""
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -7,6 +14,7 @@ from database.db import (
     get_purchase_by_id, get_pending_purchases,
     grant_attestation, get_user
 )
+from database.db import grant_subscription  # yangi funksiya
 from keyboards.keyboards import (
     cancel_keyboard, payment_confirm_keyboard,
     main_menu_keyboard, attestation_format_keyboard
@@ -16,113 +24,124 @@ from config import config
 
 router = Router()
 
-# ══════════════════════════════════════════════
-# TO'LOV BOSHLASH — buy:retry yoki buy:attestation
-# ══════════════════════════════════════════════
+PRODUCT_LABELS = {
+    'once':    "Bir martalik — 3,500 so'm",
+    'daily':   "Kunlik — 35,000 so'm",
+    'monthly': "Oylik — 100,000 so'm",
+}
+PRODUCT_PRICES = {
+    'once':    3_500,
+    'daily':   35_000,
+    'monthly': 100_000,
+}
 
-@router.callback_query(F.data.startswith("buy:"))
-async def buy_handler(callback: CallbackQuery, state: FSMContext):
-    """
-    buy:retry:onatili:aralash:None:easy
-    buy:attestation:onatili
-    buy:attestation:adabiyot
-    """
-    parts        = callback.data.split(":", 2)  # ['buy', 'retry'/'attestation', '...rest']
-    product_type = parts[1]
-    rest         = parts[2] if len(parts) > 2 else ""
+# ── TO'LOV BOSHLASH ────────────────────────────────
 
-    if product_type == 'retry':
-        amount     = config.PRICE_RETRY
-        retry_key  = rest
-        product_id = 'retry'          # ← DB da 'retry', kalit retry_key da
-        desc       = f"🔄 Qayta urinish\n<code>{retry_key}</code>"
+@router.callback_query(F.data.startswith("pay:"))
+async def pay_start(callback: CallbackQuery, state: FSMContext):
+    # pay:once:onatili:mavzu:fonetika
+    # pay:daily:onatili:mavzu:fonetika
+    # pay:monthly:onatili:mavzu:fonetika
+    parts    = callback.data.split(":", 2)
+    pay_type = parts[1]           # once | daily | monthly
+    key      = parts[2]           # access_key (once uchun) yoki ixtiyoriy (daily/monthly)
 
-    elif product_type == 'attestation':
-        subject    = rest  # 'onatili' yoki 'adabiyot'
-        amount     = config.PRICE_ATTESTATION
-        retry_key  = None
-        product_id = f"attestation_{subject}"
-        SUBJ       = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
-        desc       = f"🎓 {SUBJ.get(subject, subject)} Atestatsiyasi"
-    else:
-        await callback.answer("❌ Noma'lum mahsulot!", show_alert=True)
-        return
+    amount = PRODUCT_PRICES.get(pay_type, 0)
+    label  = PRODUCT_LABELS.get(pay_type, '')
 
-    # FSM ga saqlash
     await state.update_data(
-        product_type=product_id,
-        retry_key=retry_key,
-        amount=amount,
-        subject=rest if product_type == 'attestation' else None
+        product_type=pay_type,
+        retry_key=key,
+        amount=amount
     )
 
     await callback.message.edit_text(
-        f"💳 <b>To'lov ma'lumotlari</b>\n\n"
-        f"📦 Mahsulot: {desc}\n"
-        f"💰 Summa: <b>{amount:,} so'm</b>\n\n"
-        f"🏦 Karta raqami:\n"
-        f"<code>{config.PAYMENT_CARD}</code>\n\n"
-        f"👤 Karta egasi: <b>{config.PAYMENT_OWNER}</b>\n\n"
-        f"📸 To'lovni amalga oshirgach, <b>chek rasmini</b> yuboring:",
-        parse_mode="HTML",
-        reply_markup=cancel_keyboard()
+        f"💳 <b>{label}</b>\n\n"
+        f"To'lov miqdori: <b>{amount:,} so'm</b>\n\n"
+        f"Kartaga o'tkazing:\n"
+        f"<code>{config.PAYMENT_CARD}</code>\n"
+        f"<b>{config.PAYMENT_OWNER}</b>\n\n"
+        f"To'lovni amalga oshirgandan so'ng <b>chek rasmini</b> yuboring 👇",
+        reply_markup=cancel_keyboard(),
+        parse_mode="HTML"
     )
     await state.set_state(PaymentStates.waiting_for_check)
     await callback.answer()
 
-# ══════════════════════════════════════════════
-# CHEK RASMI QABUL QILISH
-# ══════════════════════════════════════════════
+# Attestation to'lov
+@router.callback_query(F.data.startswith("buy:attestation:"))
+async def attestation_pay_start(callback: CallbackQuery, state: FSMContext):
+    subject = callback.data.split(":")[2]
+    SUBJ = {'onatili': 'Ona tili', 'adabiyot': 'Adabiyot'}
+    amount = config.PRICE_ATTESTATION
+
+    await state.update_data(
+        product_type=f'attestation_{subject}',
+        retry_key=None,
+        amount=amount
+    )
+    await callback.message.edit_text(
+        f"🎓 <b>{SUBJ.get(subject)} Atestatsiya</b>\n\n"
+        f"To'lov miqdori: <b>{amount:,} so'm</b>\n\n"
+        f"Kartaga o'tkazing:\n"
+        f"<code>{config.PAYMENT_CARD}</code>\n"
+        f"<b>{config.PAYMENT_OWNER}</b>\n\n"
+        f"Chek rasmini yuboring 👇",
+        reply_markup=cancel_keyboard(),
+        parse_mode="HTML"
+    )
+    await state.set_state(PaymentStates.waiting_for_check)
+    await callback.answer()
+
+# ── CHEK QABUL QILISH ─────────────────────────────
 
 @router.message(PaymentStates.waiting_for_check, F.photo)
 async def receive_check(message: Message, state: FSMContext, bot: Bot):
     data         = await state.get_data()
-    product_type = data.get('product_type', 'unknown')
+    product_type = data.get('product_type')
     retry_key    = data.get('retry_key')
     amount       = data.get('amount', 0)
-    photo_id     = message.photo[-1].file_id
-
-    # DB ga saqlash
-    purchase_id = await create_purchase(
-        telegram_id=message.from_user.id,
-        product_type=product_type,
-        amount=amount,
-        check_photo=photo_id,
-        retry_key=retry_key
-    )
-
     await state.clear()
 
+    file_id = message.photo[-1].file_id
+
+    purchase_id = await create_purchase(
+        telegram_id  = message.from_user.id,
+        product_type = product_type,
+        amount       = amount,
+        check_photo  = file_id,
+        retry_key    = retry_key
+    )
+
     await message.answer(
-        f"✅ <b>Chekingiz qabul qilindi!</b>\n\n"
-        f"⏳ Admin tekshirib, tez orada tasdiqlaydi.\n"
-        f"📲 Tasdiqlangach xabar olasiz.",
+        "✅ <b>Chekingiz qabul qilindi!</b>\n\n"
+        "⏳ Admin tekshirib, tez orada aktivlashtiradi.",
         reply_markup=main_menu_keyboard(),
         parse_mode="HTML"
     )
 
-    # Adminlarga yuborish
-    user = await get_user(message.from_user.id)
-    PROD_LABELS = {
-        'retry':       '🔄 Qayta urinish',
-        'attestation': '🎓 Atestatsiya',
+    # Adminlarga xabar
+    LABELS = {
+        'once':    "Bir martalik (3,500)",
+        'daily':   "Kunlik (35,000)",
+        'monthly': "Oylik (100,000)",
     }
-    prod_short = product_type.split(":")[0] if ":" in product_type else product_type.split("_")[0]
-    prod_label = PROD_LABELS.get(prod_short, product_type)
+    user = await get_user(message.from_user.id)
+    uname = f"@{user.username}" if user and user.username else str(message.from_user.id)
+
+    label = LABELS.get(product_type, product_type)
+    key_info = f"\n🔑 Key: <code>{retry_key}</code>" if retry_key and product_type == 'once' else ""
 
     for admin_id in config.ADMIN_IDS:
         try:
             await bot.send_photo(
-                chat_id=admin_id,
-                photo=photo_id,
-                caption=(
-                    f"💳 <b>Yangi to'lov!</b>\n\n"
-                    f"👤 {user.full_name if user else 'Noma\'lum'}\n"
-                    f"📱 {user.phone_number if user else '—'}\n"
-                    f"🆔 {message.from_user.id}\n\n"
-                    f"📦 {prod_label}\n"
-                    f"💰 {amount:,} so'm\n"
-                    f"🔑 {retry_key or '—'}"
+                chat_id  = admin_id,
+                photo    = file_id,
+                caption  = (
+                    f"💰 <b>Yangi to'lov #{purchase_id}</b>\n\n"
+                    f"👤 {user.full_name if user else '?'} | {uname}\n"
+                    f"📦 Turi: <b>{label}</b>{key_info}\n"
+                    f"💵 Summa: <b>{amount:,} so'm</b>"
                 ),
                 reply_markup=payment_confirm_keyboard(purchase_id),
                 parse_mode="HTML"
@@ -133,17 +152,20 @@ async def receive_check(message: Message, state: FSMContext, bot: Bot):
 @router.message(PaymentStates.waiting_for_check)
 async def check_not_photo(message: Message):
     if message.text == "❌ Bekor qilish":
-        from aiogram.fsm.context import FSMContext
-        await message.answer("❌ Bekor qilindi.", reply_markup=main_menu_keyboard())
         return
-    await message.answer(
-        "📸 Iltimos, <b>to'lov chekining rasmini</b> yuboring:",
-        parse_mode="HTML"
-    )
+    await message.answer("📸 Iltimos, <b>rasm</b> (chek screenshot) yuboring.",
+                         parse_mode="HTML")
 
-# ══════════════════════════════════════════════
-# ADMIN: TASDIQLASH / RAD ETISH
-# ══════════════════════════════════════════════
+# ── BEKOR QILISH ──────────────────────────────────
+
+@router.callback_query(F.data == "payment:cancel")
+async def payment_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("❌ Bekor qilindi.")
+    await callback.message.answer("Bosh menyu:", reply_markup=main_menu_keyboard())
+    await callback.answer()
+
+# ── ADMIN: TASDIQLASH / RAD ETISH ────────────────
 
 @router.callback_query(F.data.startswith("confirm_pay:"))
 async def confirm_payment(callback: CallbackQuery, bot: Bot):
@@ -151,55 +173,49 @@ async def confirm_payment(callback: CallbackQuery, bot: Bot):
     purchase    = await get_purchase_by_id(purchase_id)
 
     if not purchase:
-        await callback.answer("❌ To'lov topilmadi!", show_alert=True)
-        return
-
-    if purchase.status != 'pending':
-        await callback.answer(
-            f"⚠️ Bu to'lov allaqachon: {purchase.status}",
-            show_alert=True
-        )
+        await callback.answer("❌ To'lov topilmadi!")
         return
 
     await confirm_purchase(purchase_id, callback.from_user.id)
 
-    # Atestatsiya bo'lsa — huquq berish va format so'rash
-    pt = purchase.product_type  # 'attestation_onatili' | 'retry:...'
-    if pt.startswith('attestation_'):
-        subject = pt.replace('attestation_', '')
-        # Foydalanuvchidan format so'rash
-        try:
-            await bot.send_message(
-                chat_id=purchase.telegram_id,
-                text=(
-                    f"✅ <b>To'lovingiz tasdiqlandi!</b>\n\n"
-                    f"🎓 Atestatsiya testini qanday formatda olishni xohlaysiz?"
-                ),
-                reply_markup=attestation_format_keyboard(subject),
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
-    else:
-        # Retry — to'g'ridan xabar
-        try:
-            await bot.send_message(
-                chat_id=purchase.telegram_id,
-                text=(
-                    f"✅ <b>To'lovingiz tasdiqlandi!</b>\n\n"
-                    f"🔓 Endi testni qayta boshlashingiz mumkin.\n"
-                    f"📚 Fanlar menyusidan tanlang."
-                ),
-                reply_markup=main_menu_keyboard(),
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
+    # Obuna yoki kirish berish
+    tid = purchase.telegram_id
+    pt  = purchase.product_type
 
-    # Admin xabarini yangilash
+    if pt in ('daily', 'monthly'):
+        await grant_subscription(tid, pt, purchase_id)
+    elif pt == 'once':
+        pass
+    # milliy — oddiy retry tizimi, grant kerak emas
+    elif pt == 'attestation':
+        await grant_attestation(tid, "attestation", "miniapp")
+        await bot.send_message(
+            chat_id    = tid,
+            text       = "🎓 <b>Atestatsiya sotib olindi!</b>\n\nTestni boshlashingiz mumkin.",
+            parse_mode = "HTML"
+        )
+
+    # Foydalanuvchiga xabar
+    LABELS = {
+        'once':    "Bir martalik kirish",
+        'daily':   "Kunlik obuna (24 soat)",
+        'monthly': "Oylik obuna (30 kun)",
+    }
+    label = LABELS.get(pt, pt)
+
+    try:
+        await bot.send_message(
+            chat_id    = tid,
+            text       = f"✅ <b>To'lovingiz tasdiqlandi!</b>\n\n🎉 {label} faollashtirildi.",
+            parse_mode = "HTML"
+        )
+    except Exception:
+        pass
+
     await callback.message.edit_caption(
-        caption=callback.message.caption + "\n\n✅ <b>TASDIQLANDI</b>",
-        parse_mode="HTML"
+        caption      = callback.message.caption + "\n\n✅ <b>TASDIQLANDI</b>",
+        reply_markup = None,
+        parse_mode   = "HTML"
     )
     await callback.answer("✅ Tasdiqlandi!")
 
@@ -209,93 +225,56 @@ async def reject_payment(callback: CallbackQuery, bot: Bot):
     purchase    = await get_purchase_by_id(purchase_id)
 
     if not purchase:
-        await callback.answer("❌ To'lov topilmadi!", show_alert=True)
+        await callback.answer("❌ To'lov topilmadi!")
         return
 
-    if purchase.status != 'pending':
-        await callback.answer(
-            f"⚠️ Bu to'lov allaqachon: {purchase.status}",
-            show_alert=True
-        )
-        return
-
-    await reject_purchase(purchase_id, callback.from_user.id)
+    await reject_purchase(purchase_id)
 
     try:
         await bot.send_message(
-            chat_id=purchase.telegram_id,
-            text=(
-                "❌ <b>To'lovingiz rad etildi.</b>\n\n"
-                "📸 Chekni qayta yuboring yoki admin bilan bog'laning."
-            ),
-            reply_markup=main_menu_keyboard(),
-            parse_mode="HTML"
+            chat_id    = purchase.telegram_id,
+            text       = "❌ <b>To'lovingiz rad etildi.</b>\n\nBog'lanish uchun adminga murojaat qiling.",
+            parse_mode = "HTML"
         )
     except Exception:
         pass
 
     await callback.message.edit_caption(
-        caption=callback.message.caption + "\n\n❌ <b>RAD ETILDI</b>",
-        parse_mode="HTML"
+        caption      = callback.message.caption + "\n\n❌ <b>RAD ETILDI</b>",
+        reply_markup = None,
+        parse_mode   = "HTML"
     )
-    await callback.answer("❌ Rad etildi!")
+    await callback.answer("❌ Rad etildi.")
 
-# ══════════════════════════════════════════════
-# ADMIN: KUTAYOTGAN TO'LOVLAR
-# ══════════════════════════════════════════════
+# ── KUTAYOTGAN TO'LOVLAR ──────────────────────────
 
 @router.message(F.text == "💰 Kutayotgan to'lovlar")
-async def pending_payments(message: Message, bot: Bot):
+async def pending_payments(message: Message):
+    from database.db import is_admin_check
     if message.from_user.id not in config.ADMIN_IDS:
         return
 
     purchases = await get_pending_purchases()
-
     if not purchases:
-        await message.answer("✅ Kutayotgan to'lovlar yo'q!")
+        await message.answer("✅ Kutayotgan to'lovlar yo'q.")
         return
 
-    await message.answer(f"⏳ <b>Kutayotgan to'lovlar: {len(purchases)} ta</b>", parse_mode="HTML")
+    for p in purchases:
+        user = await get_user(p.telegram_id)
+        uname = f"@{user.username}" if user and user.username else str(p.telegram_id)
+        LABELS = {'once': 'Bir martalik', 'daily': 'Kunlik', 'monthly': 'Oylik',
+               'attestation': 'Atestatsiya'}
+        label  = LABELS.get(p.product_type, p.product_type)
 
-    for purchase, user in purchases:
-        PROD_LABELS = {
-            'retry':       '🔄 Qayta urinish',
-            'attestation': '🎓 Atestatsiya',
-        }
-        prod_short = purchase.product_type.split(":")[0] if ":" in purchase.product_type \
-                     else purchase.product_type.split("_")[0]
-        prod_label = PROD_LABELS.get(prod_short, purchase.product_type)
-
-        try:
-            await bot.send_photo(
-                chat_id=message.chat.id,
-                photo=purchase.check_photo,
-                caption=(
-                    f"👤 {user.full_name or 'Noma\'lum'}\n"
-                    f"📱 {user.phone_number or '—'}\n"
-                    f"🆔 {purchase.telegram_id}\n\n"
-                    f"📦 {prod_label}\n"
-                    f"💰 {purchase.amount:,} so'm\n"
-                    f"📅 {str(purchase.submitted_at)[:16]}"
-                ),
-                reply_markup=payment_confirm_keyboard(purchase.id),
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            await message.answer(f"⚠️ Chek yuborishda xato: {e}")
-
-# ══════════════════════════════════════════════
-# BEKOR QILISH
-# ══════════════════════════════════════════════
-
-@router.message(PaymentStates.waiting_for_check, F.text == "❌ Bekor qilish")
-async def cancel_payment(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer("❌ Bekor qilindi.", reply_markup=main_menu_keyboard())
-
-@router.callback_query(F.data == "payment:cancel")
-async def cancel_payment_callback(callback: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await callback.message.edit_text("❌ Bekor qilindi.")
-    await callback.message.answer("🏠 Asosiy menyu:", reply_markup=main_menu_keyboard())
-    await callback.answer()
+        await message.bot.send_photo(
+            chat_id      = message.from_user.id,
+            photo        = p.check_photo,
+            caption      = (
+                f"💰 <b>To'lov #{p.id}</b>\n"
+                f"👤 {user.full_name if user else '?'} | {uname}\n"
+                f"📦 {label} — {p.amount:,} so'm\n"
+                f"🕐 {str(p.submitted_at)[:16]}"
+            ),
+            reply_markup = payment_confirm_keyboard(p.id),
+            parse_mode   = "HTML"
+        )

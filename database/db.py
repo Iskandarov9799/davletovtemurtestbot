@@ -9,19 +9,19 @@ from database.models import (
     User, Purchase, UserAccess, AttestationAccess,
     Question, TestResult
 )
-from database.connection import AsyncSessionLocal
+import database.connection as _conn
 
 # ──────────────────────────────────────────────
 # USERS
 # ──────────────────────────────────────────────
 
 async def get_user(telegram_id: int):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(select(User).where(User.telegram_id == telegram_id))
         return r.scalar_one_or_none()
 
 async def create_user(telegram_id: int, full_name: str, username: str = None):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         existing = await s.execute(select(User).where(User.telegram_id == telegram_id))
         if existing.scalar_one_or_none():
             return
@@ -34,7 +34,7 @@ async def create_user(telegram_id: int, full_name: str, username: str = None):
         await s.commit()
 
 async def update_user_phone(telegram_id: int, phone: str):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         await s.execute(
             update(User)
             .where(User.telegram_id == telegram_id)
@@ -47,7 +47,7 @@ async def is_registered(telegram_id: int) -> bool:
     return bool(user and user.is_registered)
 
 async def get_all_users():
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(select(User).order_by(User.registered_at.desc()))
         return r.scalars().all()
 
@@ -58,11 +58,11 @@ async def get_all_users():
 async def get_access_status(telegram_id: int, access_key: str) -> str:
     """
     'free'  — birinchi marta, bepul
-    'paid'  — retry to'lovi tasdiqlangan
+    'paid'  — to'lov tasdiqlangan (once/daily/monthly)
     'buy'   — to'lov kerak
     """
-    async with AsyncSessionLocal() as s:
-        # Bepul urinish ishlatilganmi?
+    async with _conn.AsyncSessionLocal() as s:
+        # 1. Bepul urinish ishlatilganmi?
         ua = await s.execute(
             select(UserAccess).where(
                 UserAccess.telegram_id == telegram_id,
@@ -70,26 +70,38 @@ async def get_access_status(telegram_id: int, access_key: str) -> str:
             )
         )
         ua = ua.scalar_one_or_none()
-
         if ua is None or not ua.free_used:
             return 'free'
 
-        # FIX: product_type = 'retry', retry_key = access_key
-        paid = await s.execute(
+        # 2. Faol obuna bormi? (daily / monthly)
+        from database.models import Subscription
+        now = datetime.utcnow()
+        sub = await s.execute(
+            select(Subscription).where(
+                Subscription.telegram_id == telegram_id,
+                Subscription.expires_at > now
+            ).join(Purchase, Subscription.purchase_id == Purchase.id)
+             .where(Purchase.status == 'confirmed')
+        )
+        if sub.scalar_one_or_none():
+            return 'paid'
+
+        # 3. Bir martalik to'lov (once yoki eski retry)
+        once = await s.execute(
             select(Purchase).where(
                 Purchase.telegram_id == telegram_id,
-                Purchase.product_type == 'retry',       # ← faqat 'retry'
-                Purchase.retry_key == access_key,        # ← kalit alohida
+                Purchase.product_type.in_(['once', 'retry']),
+                Purchase.retry_key == access_key,
                 Purchase.status == 'confirmed'
             )
         )
-        if paid.scalar_one_or_none():
+        if once.scalar_one_or_none():
             return 'paid'
 
         return 'buy'
 
 async def mark_free_used(telegram_id: int, access_key: str):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         ua = await s.execute(
             select(UserAccess).where(
                 UserAccess.telegram_id == telegram_id,
@@ -112,7 +124,7 @@ async def mark_free_used(telegram_id: int, access_key: str):
 # ──────────────────────────────────────────────
 
 async def has_attestation(telegram_id: int, subject: str) -> bool:
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(
             select(AttestationAccess).where(
                 AttestationAccess.telegram_id == telegram_id,
@@ -122,7 +134,7 @@ async def has_attestation(telegram_id: int, subject: str) -> bool:
         return r.scalar_one_or_none() is not None
 
 async def get_attestation_format(telegram_id: int, subject: str):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(
             select(AttestationAccess).where(
                 AttestationAccess.telegram_id == telegram_id,
@@ -133,7 +145,7 @@ async def get_attestation_format(telegram_id: int, subject: str):
         return row.format if row else None
 
 async def grant_attestation(telegram_id: int, subject: str, fmt: str):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         exists = await s.execute(
             select(AttestationAccess).where(
                 AttestationAccess.telegram_id == telegram_id,
@@ -152,6 +164,46 @@ async def grant_attestation(telegram_id: int, subject: str, fmt: str):
 # ──────────────────────────────────────────────
 # PURCHASES
 # ──────────────────────────────────────────────
+# ── SUBSCRIPTION ──────────────────────────────────────
+
+async def grant_subscription(telegram_id: int, sub_type: str, purchase_id: int):
+    """Kunlik yoki oylik obuna berish"""
+    from datetime import timedelta
+    from database.models import Subscription
+    now = datetime.utcnow()
+    if sub_type == 'daily':
+        expires = now + timedelta(days=1)
+    elif sub_type == 'monthly':
+        expires = now + timedelta(days=30)
+    else:
+        return
+    async with _conn.AsyncSessionLocal() as s:
+        s.add(Subscription(
+            telegram_id=telegram_id,
+            sub_type=sub_type,
+            started_at=now,
+            expires_at=expires,
+            purchase_id=purchase_id
+        ))
+        await s.commit()
+
+
+async def get_active_subscription(telegram_id: int):
+    """Faol obunani qaytarish yoki None"""
+    from database.models import Subscription
+    now = datetime.utcnow()
+    async with _conn.AsyncSessionLocal() as s:
+        sub = await s.execute(
+            select(Subscription).where(
+                Subscription.telegram_id == telegram_id,
+                Subscription.expires_at > now
+            ).join(Purchase, Subscription.purchase_id == Purchase.id)
+             .where(Purchase.status == 'confirmed')
+             .order_by(Subscription.expires_at.desc())
+        )
+        return sub.scalar_one_or_none()
+
+
 
 async def create_purchase(telegram_id: int, product_type: str, amount: int,
                            check_photo: str, retry_key: str = None) -> int:
@@ -159,7 +211,7 @@ async def create_purchase(telegram_id: int, product_type: str, amount: int,
     product_type: 'retry' | 'attestation_onatili' | 'attestation_adabiyot'
     retry_key:    access_key (faqat retry uchun)
     """
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         p = Purchase(
             telegram_id=telegram_id,
             product_type=product_type,  # ← har doim 'retry' yoki 'attestation_X'
@@ -174,7 +226,7 @@ async def create_purchase(telegram_id: int, product_type: str, amount: int,
         return p.id
 
 async def confirm_purchase(purchase_id: int, admin_id: int):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         await s.execute(
             update(Purchase)
             .where(Purchase.id == purchase_id)
@@ -185,7 +237,7 @@ async def confirm_purchase(purchase_id: int, admin_id: int):
         await s.commit()
 
 async def reject_purchase(purchase_id: int, admin_id: int):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         await s.execute(
             update(Purchase)
             .where(Purchase.id == purchase_id)
@@ -196,7 +248,7 @@ async def reject_purchase(purchase_id: int, admin_id: int):
         await s.commit()
 
 async def get_pending_purchases():
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(
             select(Purchase, User)
             .join(User, Purchase.telegram_id == User.telegram_id)
@@ -206,7 +258,7 @@ async def get_pending_purchases():
         return r.all()
 
 async def get_purchase_by_id(purchase_id: int):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(select(Purchase).where(Purchase.id == purchase_id))
         return r.scalar_one_or_none()
 
@@ -217,7 +269,7 @@ async def get_purchase_by_id(purchase_id: int):
 async def get_questions(subject: str, category: str,
                          subcategory: str = None, difficulty: str = None,
                          count: int = 35, is_attestation: bool = False) -> list:
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         if is_attestation:
             q = select(Question).where(
                 Question.subject == subject,
@@ -242,7 +294,7 @@ async def count_questions(subject: str = None, category: str = None,
                            subcategory: str = None, difficulty: str = None,
                            is_attestation: bool = False) -> int:
     """FIX: subject ixtiyoriy — question_editor barcha savollarni hisoblash uchun"""
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         filters = []
         if subject:        filters.append(Question.subject == subject)
         if is_attestation: filters.append(Question.is_attestation == True)
@@ -262,7 +314,7 @@ async def add_question(subject, category, question_text,
                         correct_answer, subcategory=None,
                         difficulty='medium', is_attestation=False,
                         order_num=None, image_file_id=None):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         s.add(Question(
             subject=subject, category=category, subcategory=subcategory,
             difficulty=difficulty, is_attestation=is_attestation,
@@ -274,7 +326,7 @@ async def add_question(subject, category, question_text,
         await s.commit()
 
 async def get_question_by_id(qid: int):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(select(Question).where(Question.id == qid))
         return r.scalar_one_or_none()
 
@@ -285,17 +337,17 @@ async def update_question(qid: int, **kwargs):
     values = {k: v for k, v in kwargs.items() if k in allowed}
     if not values:
         return
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         await s.execute(update(Question).where(Question.id == qid).values(**values))
         await s.commit()
 
 async def delete_question(qid: int):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         await s.execute(delete(Question).where(Question.id == qid))
         await s.commit()
 
 async def get_questions_page(subject=None, category=None, offset=0, limit=5):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         filters = []
         if subject:  filters.append(Question.subject == subject)
         if category: filters.append(Question.category == category)
@@ -306,7 +358,7 @@ async def get_questions_page(subject=None, category=None, offset=0, limit=5):
         return r.scalars().all()
 
 async def search_questions(keyword: str, subject: str = None):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         filters = [Question.question_text.ilike(f"%{keyword}%")]
         if subject:
             filters.append(Question.subject == subject)
@@ -322,7 +374,7 @@ async def search_questions(keyword: str, subject: str = None):
 async def save_test_result(telegram_id, subject, category, subcategory,
                             difficulty, correct, wrong, skipped,
                             is_attestation=False) -> float:
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         total = correct + wrong + skipped
         score = round((correct / total) * 100, 1) if total > 0 else 0.0
 
@@ -352,7 +404,7 @@ async def save_test_result(telegram_id, subject, category, subcategory,
         return score
 
 async def get_user_results(telegram_id: int, limit: int = 10):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(
             select(TestResult)
             .where(TestResult.telegram_id == telegram_id)
@@ -366,7 +418,7 @@ async def get_user_results(telegram_id: int, limit: int = 10):
 # ──────────────────────────────────────────────
 
 async def get_leaderboard(limit: int = 10):
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(
             select(
                 User.full_name,
@@ -386,7 +438,7 @@ async def get_leaderboard(limit: int = 10):
 # ──────────────────────────────────────────────
 
 async def get_full_stats() -> dict:
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         async def scalar(q):
             r = await s.execute(q)
             return r.scalar() or 0
@@ -407,7 +459,7 @@ async def get_full_stats() -> dict:
 
 async def delete_all_questions() -> int:
     """Barcha savollarni o'chirish, o'chirilgan soni qaytaradi"""
-    async with AsyncSessionLocal() as s:
+    async with _conn.AsyncSessionLocal() as s:
         result = await s.execute(delete(Question))
         await s.commit()
         return result.rowcount

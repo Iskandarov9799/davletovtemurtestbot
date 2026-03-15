@@ -10,7 +10,6 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
-
     id            = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id   = Column(BigInteger, unique=True, nullable=False)
     phone_number  = Column(String(20))
@@ -22,69 +21,79 @@ class User(Base):
 
 class Purchase(Base):
     __tablename__ = "purchases"
-
     id           = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id  = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
-    # 'retry' | 'attestation_onatili' | 'attestation_adabiyot'
+    # 'once' | 'daily' | 'monthly' | 'attestation_onatili' | 'attestation_adabiyot'
     product_type = Column(String(50), nullable=False)
-    # 'onatili:mavzu:fonetika:easy' kabi kalit
+    # 'onatili:mavzu:fonetika' kabi kalit (once uchun)
     retry_key    = Column(String(200))
     amount       = Column(Integer, nullable=False)
     check_photo  = Column(String(200))
-    status       = Column(String(20), default="pending")   # pending|confirmed|rejected
+    status       = Column(String(20), default="pending")  # pending|confirmed|rejected
     submitted_at = Column(DateTime, default=datetime.utcnow)
     confirmed_at = Column(DateTime)
     confirmed_by = Column(BigInteger)
 
 
 class UserAccess(Base):
-    """Har bir test turi uchun bepul urinish holati"""
+    """Bepul urinish holati"""
     __tablename__ = "user_access"
     __table_args__ = (UniqueConstraint("telegram_id", "access_key"),)
-
     id          = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
     access_key  = Column(String(200), nullable=False)
     free_used   = Column(Boolean, default=False)
 
 
+class Subscription(Base):
+    """Kunlik / Oylik obuna"""
+    __tablename__ = "subscriptions"
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    telegram_id  = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
+    # 'daily' | 'monthly'
+    sub_type     = Column(String(20), nullable=False)
+    started_at   = Column(DateTime, default=datetime.utcnow)
+    expires_at   = Column(DateTime, nullable=False)
+    purchase_id  = Column(Integer, ForeignKey("purchases.id"))
+
+
 class AttestationAccess(Base):
     """Atestatsiya sotib olinganmi"""
     __tablename__ = "attestation_access"
     __table_args__ = (UniqueConstraint("telegram_id", "subject"),)
-
     id           = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id  = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
-    subject      = Column(String(50), nullable=False)   # 'onatili' | 'adabiyot'
-    format       = Column(String(20))                   # 'miniapp' | 'pdf'
+    subject      = Column(String(50), nullable=False)
+    format       = Column(String(20))
     purchased_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Question(Base):
     __tablename__ = "questions"
-
     id             = Column(Integer, primary_key=True, autoincrement=True)
-    subject        = Column(String(50), nullable=False)   # 'onatili' | 'adabiyot'
-    # 'mavzu'|'aralash'|'sinf'|'gazallar'|'attestation'
+    subject        = Column(String(50), nullable=False)
     category       = Column(String(50), nullable=False)
-    # mavzu: 'fonetika'... | sinf: '5'..'11' | boshqalar: None
     subcategory    = Column(String(50))
-    difficulty     = Column(String(20))                   # easy|medium|hard|None(attestation)
+    difficulty     = Column(String(20))
     is_attestation = Column(Boolean, default=False)
-    order_num      = Column(Integer)                      # faqat attestation uchun
+    order_num      = Column(Integer)
     question_text  = Column(Text, nullable=False)
-    option_a       = Column(Text, nullable=False)
-    option_b       = Column(Text, nullable=False)
-    option_c       = Column(Text, nullable=False)
-    option_d       = Column(Text, nullable=False)
-    correct_answer = Column(String(1), nullable=False)    # 'A'|'B'|'C'|'D'
+    option_a       = Column(Text)   # yozma savol uchun None bo'lishi mumkin
+    option_b       = Column(Text)
+    option_c       = Column(Text)
+    option_d       = Column(Text)
+    correct_answer = Column(String(1))  # yozma savol uchun None
+    # Yozma savol uchun
+    question_type  = Column(String(20), default='choice')  # 'choice' | 'written'
+    written_parts  = Column(Integer, default=1)            # 1 yoki 2 (qism soni)
+    keywords_1     = Column(Text)   # 1-qism kalit so'zlari (vergul bilan)
+    keywords_2     = Column(Text)   # 2-qism kalit so'zlari (faqat 2 qismli uchun)
     image_file_id  = Column(String(200))
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
 class TestResult(Base):
     __tablename__ = "test_results"
-
     id             = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id    = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
     subject        = Column(String(50))
