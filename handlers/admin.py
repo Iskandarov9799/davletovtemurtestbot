@@ -734,63 +734,107 @@ async def excel_import_upload(message: Message):
     wb = openpyxl.load_workbook(buf)
     ws = wb.active
 
-    VALID_SUBJECTS    = {'onatili', 'adabiyot', 'attestation', 'milliy'}
-    VALID_CATEGORIES  = {'mavzu', 'aralash', 'sinf', 'gazallar', 'sheriy', 'badiiy', 'attestation', 'milliy'}
-    VALID_DIFFICULTIES= {'easy', 'medium', 'hard', ''}
-    VALID_CORRECT     = {'A', 'B', 'C', 'D'}
+    VALID_SUBJECTS   = {'onatili', 'adabiyot', 'attestation', 'milliy'}
+    VALID_CATEGORIES = {'mavzu', 'aralash', 'sinf', 'gazallar',
+                        'sheriy', 'badiiy', 'attestation', 'milliy'}
+    VALID_CORRECT    = {'A', 'B', 'C', 'D'}
 
     added   = 0
     skipped = 0
     errors  = []
 
+    # Format aniqlash — sarlavhaga qarab
+    first_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+    cols = [str(c or '').strip().lower() for c in (first_row or [])]
+    has_difficulty   = 'difficulty' in cols
+    has_written_cols = 'question_type' in cols
+
     for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if not row or not any(row):
-            continue  # Bo'sh qator
+            continue
 
         try:
-            subject        = str(row[0] or '').strip().lower()
-            category       = str(row[1] or '').strip().lower()
-            subcategory    = str(row[2] or '').strip() or None
-            difficulty     = str(row[3] or '').strip().lower()
-            is_attestation = str(row[4] or '').strip().upper() == 'TRUE'
-            order_num      = int(row[5]) if row[5] else None
-            question_text  = str(row[6] or '').strip()
-            option_a       = str(row[7] or '').strip()
-            option_b       = str(row[8] or '').strip()
-            option_c       = str(row[9] or '').strip()
-            option_d       = str(row[10] or '').strip()
-            correct        = str(row[11] or '').strip().upper()
+            if has_difficulty:
+                # Eski format (12 ustun)
+                subject        = str(row[0] or '').strip().lower()
+                category       = str(row[1] or '').strip().lower()
+                subcategory    = str(row[2] or '').strip() or None
+                is_attestation = str(row[4] or '').strip().upper() == 'TRUE'
+                order_num      = int(row[5]) if row[5] else None
+                question_text  = str(row[6] or '').strip()
+                option_a       = str(row[7] or '').strip() or None
+                option_b       = str(row[8] or '').strip() or None
+                option_c       = str(row[9] or '').strip() or None
+                option_d       = str(row[10] or '').strip() or None
+                correct        = str(row[11] or '').strip().upper() or None
+                question_type  = 'choice'
+                written_parts  = 1
+                keywords_1     = None
+                keywords_2     = None
+            elif has_written_cols:
+                # Yangi format (15 ustun)
+                subject        = str(row[0] or '').strip().lower()
+                category       = str(row[1] or '').strip().lower()
+                subcategory    = str(row[2] or '').strip() or None
+                is_attestation = str(row[3] or '').strip().upper() == 'TRUE'
+                order_num      = int(row[4]) if row[4] else None
+                question_text  = str(row[5] or '').strip()
+                option_a       = str(row[6] or '').strip() or None
+                option_b       = str(row[7] or '').strip() or None
+                option_c       = str(row[8] or '').strip() or None
+                option_d       = str(row[9] or '').strip() or None
+                correct        = str(row[10] or '').strip().upper() or None
+                question_type  = str(row[11] or 'choice').strip().lower() or 'choice'
+                written_parts  = int(row[12]) if row[12] else 1
+                keywords_1     = str(row[13] or '').strip() or None
+                keywords_2     = str(row[14] or '').strip() or None
+            else:
+                # O'rta format (11 ustun)
+                subject        = str(row[0] or '').strip().lower()
+                category       = str(row[1] or '').strip().lower()
+                subcategory    = str(row[2] or '').strip() or None
+                is_attestation = str(row[3] or '').strip().upper() == 'TRUE'
+                order_num      = int(row[4]) if row[4] else None
+                question_text  = str(row[5] or '').strip()
+                option_a       = str(row[6] or '').strip() or None
+                option_b       = str(row[7] or '').strip() or None
+                option_c       = str(row[8] or '').strip() or None
+                option_d       = str(row[9] or '').strip() or None
+                correct        = str(row[10] or '').strip().upper() or None
+                question_type  = 'choice'
+                written_parts  = 1
+                keywords_1     = None
+                keywords_2     = None
 
-            # Validatsiya
             if subject not in VALID_SUBJECTS:
                 errors.append(f"Qator {row_num}: subject '{subject}' noto'g'ri")
-                skipped += 1
-                continue
+                skipped += 1; continue
             if category not in VALID_CATEGORIES:
                 errors.append(f"Qator {row_num}: category '{category}' noto'g'ri")
-                skipped += 1
-                continue
+                skipped += 1; continue
             if not question_text:
                 errors.append(f"Qator {row_num}: savol matni bo'sh")
-                skipped += 1
-                continue
-            if correct not in VALID_CORRECT:
-                errors.append(f"Qator {row_num}: correct '{correct}' noto'g'ri (A/B/C/D)")
-                skipped += 1
-                continue
-            if not all([option_a, option_b, option_c, option_d]):
-                errors.append(f"Qator {row_num}: variantlar to'liq emas")
-                skipped += 1
-                continue
+                skipped += 1; continue
+            if question_type == 'choice':
+                if correct not in VALID_CORRECT:
+                    errors.append(f"Qator {row_num}: correct '{correct}' noto'g'ri")
+                    skipped += 1; continue
+                if not all([option_a, option_b, option_c, option_d]):
+                    errors.append(f"Qator {row_num}: variantlar to'liq emas")
+                    skipped += 1; continue
 
             await add_question(
                 subject=subject, category=category,
-                subcategory=subcategory, difficulty=difficulty or None,
+                subcategory=subcategory, difficulty=None,
                 is_attestation=is_attestation, order_num=order_num,
                 question_text=question_text,
                 option_a=option_a, option_b=option_b,
                 option_c=option_c, option_d=option_d,
-                correct_answer=correct
+                correct_answer=correct,
+                question_type=question_type,
+                written_parts=written_parts,
+                keywords_1=keywords_1,
+                keywords_2=keywords_2,
             )
             added += 1
 

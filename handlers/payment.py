@@ -250,7 +250,6 @@ async def reject_payment(callback: CallbackQuery, bot: Bot):
 
 @router.message(F.text == "💰 Kutayotgan to'lovlar")
 async def pending_payments(message: Message):
-    from database.db import is_admin_check
     if message.from_user.id not in config.ADMIN_IDS:
         return
 

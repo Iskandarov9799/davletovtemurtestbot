@@ -35,7 +35,7 @@ def question_short(q) -> str:
 
 def question_full(q) -> str:
     """Savol to'liq ko'rinishi"""
-    SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
+    SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot', 'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy'}
     DIFF = {'easy': '🟢 Oson', 'medium': "🟡 O'rta", 'hard': '🔴 Qiyin'}
     ans  = {'A': '🅰', 'B': '🅱', 'C': '🅲', 'D': '🅳'}
 
@@ -167,19 +167,25 @@ async def turn_page(callback: CallbackQuery, state: FSMContext):
     page   = int(parts[2])
     prefix = parts[3]
 
-    # Filter
-    subject  = None if prefix == "all" else prefix.split("|")[0]
-    category = None if "|" not in prefix else prefix.split("|")[1]
-
-    questions = await get_questions_page(
-        subject=subject, category=category,
-        offset=page * PAGE_SIZE, limit=PAGE_SIZE
-    )
-    total = await count_questions(subject=subject, category=category)
+    # prefix formatlari: 'all' | 'onatili' | 'onatili|mavzu' | 'search|keyword'
+    is_search = prefix.startswith("search|")
+    if is_search:
+        keyword   = prefix.split("|", 1)[1]
+        questions = await search_questions(keyword)
+        total     = len(questions)
+        page_qs   = questions[page * PAGE_SIZE: (page + 1) * PAGE_SIZE]
+    else:
+        subject  = None if prefix == "all" else prefix.split("|")[0]
+        category = prefix.split("|")[1] if "|" in prefix else None
+        page_qs   = await get_questions_page(
+            subject=subject, category=category,
+            offset=page * PAGE_SIZE, limit=PAGE_SIZE
+        )
+        total = await count_questions(subject=subject, category=category)
 
     await callback.message.edit_text(
         f"📋 <b>Savollar</b> — jami <b>{total}</b> ta\n\nSavolni bosib ko'ring:",
-        reply_markup=page_keyboard(questions, page, total, prefix),
+        reply_markup=page_keyboard(page_qs, page, total, prefix),
         parse_mode="HTML"
     )
     await callback.answer()
