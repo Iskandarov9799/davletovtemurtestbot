@@ -844,16 +844,25 @@ async def excel_import_upload(message: Message):
             errors.append(f"Qator {row_num}: {html.escape(str(e))}")
             skipped += 1
 
-    # Natija
+    # Natija — asosiy xabar
     text = (
         f"✅ <b>Import tugadi!</b>\n\n"
         f"✅ Qo'shildi: <b>{added} ta</b>\n"
         f"❌ O'tkazildi: <b>{skipped} ta</b>\n"
     )
     if errors:
-        error_text = "\n".join(errors[:10])
-        if len(errors) > 10:
-            error_text += f"\n... va yana {len(errors)-10} ta xato"
-        text += f"\n⚠️ <b>Xatolar:</b>\n<code>{error_text}</code>"
+        text += f"\n⚠️ Xatolar: <b>{len(errors)} ta</b>"
 
     await message.answer(text, parse_mode="HTML", reply_markup=admin_keyboard())
+
+    # Xatolar bo'lsa — alohida xabarlarda (4096 limit)
+    if errors:
+        chunk = ""
+        for err in errors:
+            line = html.escape(str(err)) + "\n"
+            if len(chunk) + len(line) > 3800:
+                await message.answer(f"<code>{chunk}</code>", parse_mode="HTML")
+                chunk = ""
+            chunk += line
+        if chunk:
+            await message.answer(f"<code>{chunk}</code>", parse_mode="HTML")
