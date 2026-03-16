@@ -310,8 +310,8 @@ async def count_questions(subject: str = None, category: str = None,
         return r.scalar() or 0
 
 async def add_question(subject, category, question_text,
-                        option_a=None, option_b=None, option_c=None, option_d=None,
-                        correct_answer=None, subcategory=None,
+                        option_a, option_b, option_c, option_d,
+                        correct_answer, subcategory=None,
                         difficulty=None, is_attestation=False,
                         order_num=None, image_file_id=None,
                         question_type='choice', written_parts=1,
@@ -337,8 +337,7 @@ async def get_question_by_id(qid: int):
 async def update_question(qid: int, **kwargs):
     allowed = ['subject','category','subcategory','difficulty','is_attestation',
                'order_num','question_text','option_a','option_b','option_c',
-               'option_d','correct_answer','image_file_id',
-               'question_type','written_parts','keywords_1','keywords_2']
+               'option_d','correct_answer','image_file_id']
     values = {k: v for k, v in kwargs.items() if k in allowed}
     if not values:
         return
