@@ -1,11 +1,11 @@
 import ssl
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from database.models import Base
 
 
 def _clean_url(raw: str) -> str:
-    """postgres:// → postgresql+asyncpg://, asyncpg qabul qilmaydigan parametrlarni olib tashlash"""
     if raw.startswith("postgres://"):
         raw = raw.replace("postgres://", "postgresql+asyncpg://", 1)
     elif raw.startswith("postgresql://"):
@@ -57,33 +57,39 @@ async def init_db():
     engine = _engine or init_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    # Yangi ustunlarni avtomatik qo'shish (migration)
     await _auto_migrate(engine)
     print("✅ Database tayyor!")
 
 
 async def _auto_migrate(engine):
-    """Eski DB ga yangi ustunlarni qo'shadi — xavfsiz, mavjudini o'zgartirmaydi."""
-    new_columns = [
-        ("questions", "question_type",  "VARCHAR(20) DEFAULT 'choice'"),
-        ("questions", "written_parts",  "INTEGER DEFAULT 1"),
-        ("questions", "keywords_1",     "TEXT"),
-        ("questions", "keywords_2",     "TEXT"),
-    ]
+    """Eski DB ga yangi ustunlar qo'shish va NOT NULL cheklovlarini olib tashlash."""
     async with engine.begin() as conn:
+
+        # 1. Yangi ustunlar qo'shish
+        new_columns = [
+            ("questions", "question_type", "VARCHAR(20) DEFAULT 'choice'"),
+            ("questions", "written_parts", "INTEGER DEFAULT 1"),
+            ("questions", "keywords_1",    "TEXT"),
+            ("questions", "keywords_2",    "TEXT"),
+        ]
         for table, col, col_type in new_columns:
             exists = await conn.scalar(
-                __import__("sqlalchemy").text(
-                    "SELECT COUNT(*) FROM information_schema.columns "
-                    "WHERE table_name = :t AND column_name = :c"
-                ),
+                text("SELECT COUNT(*) FROM information_schema.columns "
+                     "WHERE table_name = :t AND column_name = :c"),
                 {"t": table, "c": col}
             )
             if not exists:
-                await conn.execute(
-                    __import__("sqlalchemy").text(
-                        f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"
-                    )
-                )
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                 print(f"✅ Migration: {table}.{col} qo'shildi")
+
+        # 2. Yozma savollar uchun option_a/b/c/d NOT NULL olib tashlash
+        nullable_cols = ["option_a", "option_b", "option_c", "option_d", "correct_answer"]
+        for col in nullable_cols:
+            is_nullable = await conn.scalar(
+                text("SELECT is_nullable FROM information_schema.columns "
+                     "WHERE table_name = 'questions' AND column_name = :c"),
+                {"c": col}
+            )
+            if is_nullable == "NO":
+                await conn.execute(text(f"ALTER TABLE questions ALTER COLUMN {col} DROP NOT NULL"))
+                print(f"✅ Migration: questions.{col} NOT NULL olib tashlandi")
