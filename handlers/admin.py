@@ -1,3 +1,4 @@
+import html
 import io
 import openpyxl
 from aiogram import Router, F, Bot
@@ -839,7 +840,8 @@ async def excel_import_upload(message: Message):
             added += 1
 
         except Exception as e:
-            errors.append(f"Qator {row_num}: {e}")
+
+            errors.append(f"Qator {row_num}: {html.escape(str(e))}")
             skipped += 1
 
     # Natija
