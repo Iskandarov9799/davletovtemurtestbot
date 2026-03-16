@@ -177,7 +177,7 @@ function renderQuestion(i) {
 
   document.getElementById('btn-skip').style.display = 'inline-flex';
   document.getElementById('btn-next').style.display = 'none';
-  document.getElementById('btn-finish').style.display = 'none';
+  document.getElementById('btn-end').style.display = 'none';
 
   if (isWritten(q)) {
     renderWrittenQuestion(q);
@@ -289,7 +289,7 @@ function selectOption(label) {
   const isLast  = current === questions.length - 1;
   const allDone = answers.every(a => a !== null);
   if (allDone || isLast) {
-    document.getElementById('btn-finish').style.display = 'inline-flex';
+    document.getElementById('btn-end').style.display = 'inline-flex';
   } else {
     document.getElementById('btn-next').style.display = 'inline-flex';
   }
@@ -380,7 +380,7 @@ function submitWritten() {
   const isLast  = current === questions.length - 1;
   const allDone = answers.every(a => a !== null);
   if (allDone || isLast) {
-    document.getElementById('btn-finish').style.display = 'inline-flex';
+    document.getElementById('btn-end').style.display = 'inline-flex';
   } else {
     document.getElementById('btn-next').style.display = 'inline-flex';
   }
