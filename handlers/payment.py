@@ -93,6 +93,28 @@ async def attestation_pay_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PaymentStates.waiting_for_check)
     await callback.answer()
 
+# Attestation standalone to'lov (fan ajratilmagan)
+@router.callback_query(F.data == "buy:attestation")
+async def attestation_pay_standalone(callback: CallbackQuery, state: FSMContext):
+    amount = config.PRICE_ATTESTATION
+    await state.update_data(
+        product_type='attestation',
+        retry_key=None,
+        amount=amount
+    )
+    await callback.message.edit_text(
+        f"🎓 <b>Atestatsiya</b>\n\n"
+        f"To'lov miqdori: <b>{amount:,} so'm</b>\n\n"
+        f"Kartaga o'tkazing:\n"
+        f"<code>{config.PAYMENT_CARD}</code>\n"
+        f"<b>{config.PAYMENT_OWNER}</b>\n\n"
+        f"Chek rasmini yuboring 👇",
+        reply_markup=cancel_keyboard(),
+        parse_mode="HTML"
+    )
+    await state.set_state(PaymentStates.waiting_for_check)
+    await callback.answer()
+
 # ── CHEK QABUL QILISH ─────────────────────────────
 
 @router.message(PaymentStates.waiting_for_check, F.photo)
@@ -228,7 +250,7 @@ async def reject_payment(callback: CallbackQuery, bot: Bot):
         await callback.answer("❌ To'lov topilmadi!")
         return
 
-    await reject_purchase(purchase_id)
+    await reject_purchase(purchase_id, callback.from_user.id)
 
     try:
         await bot.send_message(
