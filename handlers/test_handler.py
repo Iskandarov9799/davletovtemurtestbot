@@ -231,6 +231,7 @@ async def adabiyot_menu(message: Message):
 
 @router.message(F.text == "🎓 Atestatsiya")
 async def attestation_menu(message: Message):
+    print("DEBUG: Attestatsiya tugmasi bosildi!") # Terminalda buni ko'rishingiz kerak
     if not await is_registered(message.from_user.id):
         await message.answer("❗ Avval ro'yxatdan o'ting — /start")
         return

@@ -310,10 +310,12 @@ async def count_questions(subject: str = None, category: str = None,
         return r.scalar() or 0
 
 async def add_question(subject, category, question_text,
-                        option_a, option_b, option_c, option_d,
-                        correct_answer, subcategory=None,
-                        difficulty='medium', is_attestation=False,
-                        order_num=None, image_file_id=None):
+                        option_a=None, option_b=None, option_c=None, option_d=None,
+                        correct_answer=None, subcategory=None,
+                        difficulty=None, is_attestation=False,
+                        order_num=None, image_file_id=None,
+                        question_type='choice', written_parts=1,
+                        keywords_1=None, keywords_2=None):
     async with _conn.AsyncSessionLocal() as s:
         s.add(Question(
             subject=subject, category=category, subcategory=subcategory,
@@ -321,7 +323,9 @@ async def add_question(subject, category, question_text,
             order_num=order_num, question_text=question_text,
             option_a=option_a, option_b=option_b,
             option_c=option_c, option_d=option_d,
-            correct_answer=correct_answer, image_file_id=image_file_id
+            correct_answer=correct_answer, image_file_id=image_file_id,
+            question_type=question_type, written_parts=written_parts,
+            keywords_1=keywords_1, keywords_2=keywords_2,
         ))
         await s.commit()
 
@@ -333,7 +337,8 @@ async def get_question_by_id(qid: int):
 async def update_question(qid: int, **kwargs):
     allowed = ['subject','category','subcategory','difficulty','is_attestation',
                'order_num','question_text','option_a','option_b','option_c',
-               'option_d','correct_answer','image_file_id']
+               'option_d','correct_answer','image_file_id',
+               'question_type','written_parts','keywords_1','keywords_2']
     values = {k: v for k, v in kwargs.items() if k in allowed}
     if not values:
         return
