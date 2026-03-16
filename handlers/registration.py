@@ -115,23 +115,6 @@ async def menu_adabiyot(message: Message, state: FSMContext):
         parse_mode="HTML"
     )
 
-@router.message(F.text == "🎓 Atestatsiya")
-async def menu_attestation(message: Message, state: FSMContext):
-    if not await is_registered(message.from_user.id):
-        await message.answer("❌ Avval ro'yxatdan o'ting! /start")
-        return
-    from keyboards.keyboards import InlineKeyboardMarkup, InlineKeyboardButton
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    await message.answer(
-        "🎓 <b>Atestatsiya</b>\n\n"
-        "Fan tanlang:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📚 Ona tili atestatsiyasi",  callback_data="onatili:attestation")],
-            [InlineKeyboardButton(text="📖 Adabiyot atestatsiyasi",  callback_data="adabiyot:attestation")],
-        ]),
-        parse_mode="HTML"
-    )
-
 @router.message(F.text == "📊 Natijalarim")
 async def menu_results(message: Message):
     if not await is_registered(message.from_user.id):
