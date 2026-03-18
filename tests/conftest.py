@@ -2,6 +2,10 @@
 Test konfiguratsiyasi — SQLite in-memory DB ishlatadi.
 Haqiqiy PostgreSQL ga tegmaydi.
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import asyncio
 import pytest
 import pytest_asyncio
