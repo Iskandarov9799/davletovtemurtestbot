@@ -3,9 +3,10 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 
 from database.db import (
-    is_registered, get_access_status, mark_free_used,
+    is_registered, get_access_status, mark_free_used, mark_once_used,
     has_attestation, get_attestation_format,
-    get_questions, count_questions
+    get_questions, count_questions,
+    mark_wrong_question, mark_correct_question
 )
 from keyboards.keyboards import (
     onatili_category_keyboard, onatili_bolimlar_keyboard,
@@ -178,6 +179,8 @@ async def send_miniapp(callback, subject, category,
             return
         elif status == 'free':
             await mark_free_used(tid, access_key)
+        elif status == 'paid':
+            await mark_once_used(tid, access_key)
     else:
         pass  # attestation endi send_miniapp orqali emas
 
@@ -185,7 +188,8 @@ async def send_miniapp(callback, subject, category,
         subject=subject, category=category,
         subcategory=subcategory, difficulty=None,
         count=config.ATTESTATION_COUNT if is_attestation else min(cnt, config.MAX_QUESTIONS),
-        is_attestation=is_attestation
+        is_attestation=is_attestation,
+        telegram_id=tid if not is_attestation else None
     )
 
     meta = {'subject': subject, 'category': category, 'subcategory': subcategory,
@@ -515,8 +519,9 @@ async def receive_miniapp_result(message: Message):
         total   = data.get('total', 35)
         pct     = data.get('score', 0)
 
+        tid = message.from_user.id
         await save_test_result(
-            telegram_id=message.from_user.id,
+            telegram_id=tid,
             subject=data.get('subject', 'onatili'),
             category=data.get('category', 'aralash'),
             subcategory=data.get('subcategory'),
@@ -524,6 +529,17 @@ async def receive_miniapp_result(message: Message):
             correct=correct, wrong=wrong, skipped=skipped,
             is_attestation=data.get('is_attestation', False)
         )
+
+        for qid in data.get('wrong_ids', []):
+            try:
+                await mark_wrong_question(tid, int(qid))
+            except Exception:
+                pass
+        for qid in data.get('correct_ids', []):
+            try:
+                await mark_correct_question(tid, int(qid))
+            except Exception:
+                pass
 
         if pct >= 90:   grade, emoji = "A'lo (5)",      "🏆"
         elif pct >= 70: grade, emoji = "Yaxshi (4)",     "🎉"
