@@ -30,6 +30,7 @@ class Config:
     PRICE_ATTESTATION: int = 50_000  # Attestatsiya — bir martalik
     PRICE_MILLIY:      int = 0        # Milliy sertifikat — oddiy to'lov tizimi (bepul + retry)
     MIN_QUESTIONS:     int = 35
+    MAX_QUESTIONS:     int = 50
     ATTESTATION_COUNT: int = 35
 
     SUBJECTS = {
