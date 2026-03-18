@@ -280,8 +280,7 @@ async def pending_payments(message: Message):
         await message.answer("✅ Kutayotgan to'lovlar yo'q.")
         return
 
-    for p in purchases:
-        user = await get_user(p.telegram_id)
+    for p, user in purchases:
         uname = f"@{user.username}" if user and user.username else str(p.telegram_id)
         LABELS = {'once': 'Bir martalik', 'daily': 'Kunlik', 'monthly': 'Oylik',
                'attestation': 'Atestatsiya'}
