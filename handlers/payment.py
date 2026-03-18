@@ -206,33 +206,116 @@ async def confirm_payment(callback: CallbackQuery, bot: Bot):
 
     if pt in ('daily', 'monthly'):
         await grant_subscription(tid, pt, purchase_id)
+        LABELS = {'daily': "Kunlik obuna (24 soat)", 'monthly': "Oylik obuna (30 kun)"}
+        try:
+            await bot.send_message(
+                chat_id    = tid,
+                text       = f"✅ <b>To'lovingiz tasdiqlandi!</b>\n\n🎉 {LABELS.get(pt)} faollashtirildi.\n\nEndi barcha bo'limlardan testlarni ishlashingiz mumkin!",
+                reply_markup=main_menu_keyboard(),
+                parse_mode = "HTML"
+            )
+        except Exception:
+            pass
+
     elif pt == 'once':
-        pass
-    # milliy — oddiy retry tizimi, grant kerak emas
+        # access_key orqali test linkini yaratib yuborish
+        access_key = purchase.retry_key or ''
+        try:
+            if access_key and ':' in access_key:
+                parts = access_key.split(':')
+                subject    = parts[0] if len(parts) > 0 else 'onatili'
+                category   = parts[1] if len(parts) > 1 else 'aralash'
+                subcategory = parts[2] if len(parts) > 2 and parts[2] != 'None' else None
+
+                from database.db import get_questions, count_questions
+                from handlers.test_handler import (
+                    questions_to_miniapp, encode_questions,
+                    resolve_image_urls
+                )
+                from keyboards.keyboards import miniapp_keyboard
+                from config import config
+
+                cnt = await count_questions(subject=subject, category=category, subcategory=subcategory)
+                questions = await get_questions(
+                    subject=subject, category=category,
+                    subcategory=subcategory, difficulty=None,
+                    count=min(cnt, config.MAX_QUESTIONS)
+                )
+                meta = {'subject': subject, 'category': category,
+                        'subcategory': subcategory, 'is_attestation': False,
+                        'solution_url': config.SOLUTION_URL}
+                q_list  = questions_to_miniapp(questions)
+                q_list  = await resolve_image_urls(q_list, bot)
+                encoded = encode_questions(q_list, meta)
+                url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
+
+                await bot.send_message(
+                    chat_id    = tid,
+                    text       = f"✅ <b>To'lovingiz tasdiqlandi!</b>\n\n🎉 Testni boshlashingiz mumkin 👇",
+                    reply_markup=miniapp_keyboard(url),
+                    parse_mode = "HTML"
+                )
+            else:
+                await bot.send_message(
+                    chat_id    = tid,
+                    text       = "✅ <b>To'lovingiz tasdiqlandi!</b>\n\n🎉 Bir martalik kirish faollashtirildi.",
+                    reply_markup=main_menu_keyboard(),
+                    parse_mode = "HTML"
+                )
+        except Exception as e:
+            await bot.send_message(
+                chat_id    = tid,
+                text       = "✅ <b>To'lovingiz tasdiqlandi!</b>\n\nTestni boshlash uchun bo'limni tanlang.",
+                reply_markup=main_menu_keyboard(),
+                parse_mode = "HTML"
+            )
+
+    elif pt == 'milliy':
+        from database.db import get_questions
+        from handlers.test_handler import (
+            questions_to_miniapp, encode_questions, resolve_image_urls
+        )
+        from keyboards.keyboards import miniapp_keyboard
+        from config import config
+        questions = await get_questions(subject="milliy", category="milliy", is_attestation=True, count=44)
+        meta = {"subject": "milliy", "category": "milliy", "is_attestation": True, "solution_url": config.SOLUTION_URL}
+        q_list  = questions_to_miniapp(questions)
+        q_list  = await resolve_image_urls(q_list, bot)
+        encoded = encode_questions(q_list, meta)
+        url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
+        try:
+            await bot.send_message(
+                chat_id    = tid,
+                text       = "✅ <b>To'lovingiz tasdiqlandi!</b>\n\n🏅 Milliy sertifikat testi 👇",
+                reply_markup=miniapp_keyboard(url),
+                parse_mode = "HTML"
+            )
+        except Exception:
+            pass
+
     elif pt == 'attestation':
         await grant_attestation(tid, "attestation", "miniapp")
-        await bot.send_message(
-            chat_id    = tid,
-            text       = "🎓 <b>Atestatsiya sotib olindi!</b>\n\nTestni boshlashingiz mumkin.",
-            parse_mode = "HTML"
+        from database.db import get_questions
+        from handlers.test_handler import (
+            questions_to_miniapp, encode_questions, resolve_image_urls
         )
-
-    # Foydalanuvchiga xabar
-    LABELS = {
-        'once':    "Bir martalik kirish",
-        'daily':   "Kunlik obuna (24 soat)",
-        'monthly': "Oylik obuna (30 kun)",
-    }
-    label = LABELS.get(pt, pt)
-
-    try:
-        await bot.send_message(
-            chat_id    = tid,
-            text       = f"✅ <b>To'lovingiz tasdiqlandi!</b>\n\n🎉 {label} faollashtirildi.",
-            parse_mode = "HTML"
-        )
-    except Exception:
-        pass
+        from keyboards.keyboards import miniapp_keyboard
+        from config import config
+        questions = await get_questions(subject="attestation", category="attestation", is_attestation=True, count=config.ATTESTATION_COUNT)
+        meta = {"subject": "attestation", "category": "attestation", "is_attestation": True, "solution_url": config.SOLUTION_URL}
+        q_list  = questions_to_miniapp(questions)
+        q_list  = await resolve_image_urls(q_list, bot)
+        encoded = encode_questions(q_list, meta)
+        url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
+        try:
+            await bot.send_message(
+                chat_id    = tid,
+                text       = "🎓 <b>Atestatsiya sotib olindi!</b>\n\nTestni boshlang 👇",
+                reply_markup=miniapp_keyboard(url),
+                parse_mode = "HTML"
+            )
+        except Exception:
+            pass
 
     await callback.message.edit_caption(
         caption      = callback.message.caption + "\n\n✅ <b>TASDIQLANDI</b>",
