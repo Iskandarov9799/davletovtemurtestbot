@@ -30,6 +30,7 @@ class Purchase(Base):
     amount       = Column(Integer, nullable=False)
     check_photo  = Column(String(200))
     status       = Column(String(20), default="pending")  # pending|confirmed|rejected
+    is_used      = Column(Boolean, default=False)           # once uchun: ishlatilganmi
     submitted_at = Column(DateTime, default=datetime.utcnow)
     confirmed_at = Column(DateTime)
     confirmed_by = Column(BigInteger)
@@ -90,6 +91,17 @@ class Question(Base):
     keywords_2     = Column(Text)   # 2-qism kalit so'zlari (faqat 2 qismli uchun)
     image_file_id  = Column(String(200))
     created_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class UserWrongQuestion(Base):
+    """Foydalanuvchi xato qilgan savollar"""
+    __tablename__ = "user_wrong_questions"
+    __table_args__ = (UniqueConstraint("telegram_id", "question_id"),)
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    telegram_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
+    question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
+    wrong_count = Column(Integer, default=1)
+    last_wrong  = Column(DateTime, default=datetime.utcnow)
 
 
 class TestResult(Base):

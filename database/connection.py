@@ -67,7 +67,8 @@ async def _auto_migrate(engine):
 
         # 1. Yangi ustunlar qo'shish
         new_columns = [
-            ("questions", "question_type", "VARCHAR(20) DEFAULT 'choice'"),
+            ("purchases",  "is_used",       "BOOLEAN DEFAULT FALSE"),
+        ("questions", "question_type", "VARCHAR(20) DEFAULT 'choice'"),
             ("questions", "written_parts", "INTEGER DEFAULT 1"),
             ("questions", "keywords_1",    "TEXT"),
             ("questions", "keywords_2",    "TEXT"),
@@ -82,7 +83,25 @@ async def _auto_migrate(engine):
                 await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                 print(f"✅ Migration: {table}.{col} qo'shildi")
 
-        # 2. Yozma savollar uchun option_a/b/c/d NOT NULL olib tashlash
+        # 2. user_wrong_questions jadvali (agar yo'q bo'lsa create_all qo'shadi, lekin ustunlarni tekshiramiz)
+        wrong_exists = await conn.scalar(
+            text("SELECT COUNT(*) FROM information_schema.tables "
+                 "WHERE table_name = 'user_wrong_questions'")
+        )
+        if not wrong_exists:
+            await conn.execute(text("""
+                CREATE TABLE user_wrong_questions (
+                    id SERIAL PRIMARY KEY,
+                    telegram_id BIGINT NOT NULL REFERENCES users(telegram_id),
+                    question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+                    wrong_count INTEGER DEFAULT 1,
+                    last_wrong TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(telegram_id, question_id)
+                )
+            """))
+            print("✅ Migration: user_wrong_questions jadvali yaratildi")
+
+        # 3. Yozma savollar uchun option_a/b/c/d NOT NULL olib tashlash
         nullable_cols = ["option_a", "option_b", "option_c", "option_d", "correct_answer"]
         for col in nullable_cols:
             is_nullable = await conn.scalar(

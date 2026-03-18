@@ -1,4 +1,3 @@
-import html
 import io
 import openpyxl
 from aiogram import Router, F, Bot
@@ -234,8 +233,39 @@ async def addq_category(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("addq:topic:"))
 async def addq_topic(callback: CallbackQuery, state: FSMContext):
     topic = callback.data.split(":")[2]
-    await state.update_data(subcategory=topic, is_attestation=False)
     label = config.ONA_TILI_BOLIMLAR.get(topic, topic)
+    submavzular = config.ONA_TILI_SUBMAVZULAR.get(topic, {})
+
+    if submavzular:
+        # Sub-mavzular bor — tanlash kerak
+        await state.update_data(bolim=topic, is_attestation=False)
+        from keyboards.keyboards import addq_submavzu_keyboard
+        await callback.message.edit_text(
+            f"📌 <b>{label}</b>\n\nSub-mavzuni tanlang:",
+            reply_markup=addq_submavzu_keyboard(topic),
+            parse_mode="HTML"
+        )
+    else:
+        # Sub-mavzu yo'q — to'g'ridan rasmga
+        await state.update_data(subcategory=topic, is_attestation=False)
+        await callback.message.answer(
+            f"📌 <b>{label}</b>\n\n📸 Rasm yuboring yoki o'tkazib yuboring:",
+            reply_markup=skip_image_keyboard(),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.add_image)
+    await callback.answer()
+
+# Sub-mavzu tanlash
+@router.callback_query(F.data.startswith("addq:sub:"))
+async def addq_sub(callback: CallbackQuery, state: FSMContext):
+    sub_key = callback.data.split(":")[2]
+    data = await state.get_data()
+    bolim = data.get("bolim", "")
+    # subcategory = bolim_submavzu formatda
+    subcategory = f"{bolim}_{sub_key}" if bolim else sub_key
+    await state.update_data(subcategory=subcategory, is_attestation=False)
+    label = config.ONA_TILI_SUBMAVZULAR.get(bolim, {}).get(sub_key, sub_key)
     await callback.message.answer(
         f"📌 <b>{label}</b>\n\n📸 Rasm yuboring yoki o'tkazib yuboring:",
         reply_markup=skip_image_keyboard(),
@@ -840,29 +870,19 @@ async def excel_import_upload(message: Message):
             added += 1
 
         except Exception as e:
-
-            errors.append(f"Qator {row_num}: {html.escape(str(e))}")
+            errors.append(f"Qator {row_num}: {e}")
             skipped += 1
 
-    # Natija — asosiy xabar
+    # Natija
     text = (
         f"✅ <b>Import tugadi!</b>\n\n"
         f"✅ Qo'shildi: <b>{added} ta</b>\n"
         f"❌ O'tkazildi: <b>{skipped} ta</b>\n"
     )
     if errors:
-        text += f"\n⚠️ Xatolar: <b>{len(errors)} ta</b>"
+        error_text = "\n".join(errors[:10])
+        if len(errors) > 10:
+            error_text += f"\n... va yana {len(errors)-10} ta xato"
+        text += f"\n⚠️ <b>Xatolar:</b>\n<code>{error_text}</code>"
 
     await message.answer(text, parse_mode="HTML", reply_markup=admin_keyboard())
-
-    # Xatolar bo'lsa — alohida xabarlarda (4096 limit)
-    if errors:
-        chunk = ""
-        for err in errors:
-            line = html.escape(str(err)) + "\n"
-            if len(chunk) + len(line) > 3800:
-                await message.answer(f"<code>{chunk}</code>", parse_mode="HTML")
-                chunk = ""
-            chunk += line
-        if chunk:
-            await message.answer(f"<code>{chunk}</code>", parse_mode="HTML")

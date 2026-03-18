@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from database.models import (
     User, Purchase, UserAccess, AttestationAccess,
-    Question, TestResult
+    Question, TestResult, UserWrongQuestion
 )
 import database.connection as _conn
 
@@ -86,19 +86,36 @@ async def get_access_status(telegram_id: int, access_key: str) -> str:
         if sub.scalar_one_or_none():
             return 'paid'
 
-        # 3. Bir martalik to'lov (once yoki eski retry)
+        # 3. Bir martalik to'lov (once) — ishlatilmagan bo'lishi kerak
         once = await s.execute(
             select(Purchase).where(
                 Purchase.telegram_id == telegram_id,
                 Purchase.product_type.in_(['once', 'retry']),
                 Purchase.retry_key == access_key,
-                Purchase.status == 'confirmed'
+                Purchase.status == 'confirmed',
+                Purchase.is_used == False
             )
         )
         if once.scalar_one_or_none():
             return 'paid'
 
         return 'buy'
+
+async def mark_once_used(telegram_id: int, access_key: str):
+    """Once to'lovni ishlatilgan deb belgilash"""
+    async with _conn.AsyncSessionLocal() as s:
+        await s.execute(
+            update(Purchase)
+            .where(
+                Purchase.telegram_id == telegram_id,
+                Purchase.product_type.in_(['once', 'retry']),
+                Purchase.retry_key == access_key,
+                Purchase.status == 'confirmed',
+                Purchase.is_used == False
+            )
+            .values(is_used=True)
+        )
+        await s.commit()
 
 async def mark_free_used(telegram_id: int, access_key: str):
     async with _conn.AsyncSessionLocal() as s:
@@ -268,27 +285,68 @@ async def get_purchase_by_id(purchase_id: int):
 
 async def get_questions(subject: str, category: str,
                          subcategory: str = None, difficulty: str = None,
-                         count: int = 35, is_attestation: bool = False) -> list:
+                         count: int = 35, is_attestation: bool = False,
+                         telegram_id: int = None) -> list:
+    """
+    Savollarni qaytaradi:
+    - Attestation: tartib bo'yicha (order_num)
+    - Oddiy: avval foydalanuvchi xato qilgan savollar, keyin random yangilar
+    """
     async with _conn.AsyncSessionLocal() as s:
         if is_attestation:
             q = select(Question).where(
                 Question.subject == subject,
                 Question.is_attestation == True
             ).order_by(Question.order_num)
-        else:
-            filters = [
-                Question.subject == subject,
-                Question.category == category,
-                Question.is_attestation == False,
-            ]
-            if subcategory:
-                filters.append(Question.subcategory == subcategory)
-            if difficulty:
-                filters.append(Question.difficulty == difficulty)
-            q = select(Question).where(*filters).order_by(func.random()).limit(count)
+            r = await s.execute(q)
+            return r.scalars().all()
 
-        r = await s.execute(q)
-        return r.scalars().all()
+        filters = [
+            Question.subject == subject,
+            Question.category == category,
+            Question.is_attestation == False,
+        ]
+        if subcategory:
+            filters.append(Question.subcategory == subcategory)
+        if difficulty:
+            filters.append(Question.difficulty == difficulty)
+
+        if not telegram_id:
+            # Foydalanuvchi aniqlanmagan — oddiy random
+            q = select(Question).where(*filters).order_by(func.random()).limit(count)
+            r = await s.execute(q)
+            return r.scalars().all()
+
+        # 1. Xato qilingan savollar (wrong_count bo'yicha kamayish tartibida)
+        wrong_q = (
+            select(Question)
+            .join(UserWrongQuestion, UserWrongQuestion.question_id == Question.id)
+            .where(
+                *filters,
+                UserWrongQuestion.telegram_id == telegram_id
+            )
+            .order_by(UserWrongQuestion.wrong_count.desc())
+            .limit(count)
+        )
+        wrong_r = await s.execute(wrong_q)
+        wrong_questions = list(wrong_r.scalars().all())
+        wrong_ids = [q.id for q in wrong_questions]
+
+        remaining = count - len(wrong_questions)
+
+        if remaining <= 0:
+            return wrong_questions[:count]
+
+        # 2. Yangi savollar (xato qilinmaganlar)
+        new_filters = filters + [Question.id.notin_(wrong_ids)] if wrong_ids else filters
+        new_q = select(Question).where(*new_filters).order_by(func.random()).limit(remaining)
+        new_r = await s.execute(new_q)
+        new_questions = list(new_r.scalars().all())
+
+        # Xato savollar oldin, keyin yangilar
+        import random
+        random.shuffle(new_questions)
+        return wrong_questions + new_questions
 
 async def count_questions(subject: str = None, category: str = None,
                            subcategory: str = None, difficulty: str = None,
@@ -327,6 +385,38 @@ async def add_question(subject, category, question_text,
             question_type=question_type, written_parts=written_parts,
             keywords_1=keywords_1, keywords_2=keywords_2,
         ))
+        await s.commit()
+
+async def mark_wrong_question(telegram_id: int, question_id: int):
+    """Foydalanuvchi xato qilgan savolni qayd etish"""
+    async with _conn.AsyncSessionLocal() as s:
+        existing = await s.execute(
+            select(UserWrongQuestion).where(
+                UserWrongQuestion.telegram_id == telegram_id,
+                UserWrongQuestion.question_id == question_id
+            )
+        )
+        existing = existing.scalar_one_or_none()
+        if existing:
+            existing.wrong_count += 1
+            existing.last_wrong = datetime.utcnow()
+        else:
+            s.add(UserWrongQuestion(
+                telegram_id=telegram_id,
+                question_id=question_id,
+                wrong_count=1
+            ))
+        await s.commit()
+
+async def mark_correct_question(telegram_id: int, question_id: int):
+    """Foydalanuvchi to'g'ri javob bergan savolni xatolar ro'yxatidan olib tashlash"""
+    async with _conn.AsyncSessionLocal() as s:
+        await s.execute(
+            delete(UserWrongQuestion).where(
+                UserWrongQuestion.telegram_id == telegram_id,
+                UserWrongQuestion.question_id == question_id
+            )
+        )
         await s.commit()
 
 async def get_question_by_id(qid: int):

@@ -222,7 +222,7 @@ async def menu_help(message: Message):
         "4️⃣ <b>Birinchi urinish bepul!</b>\n"
         "5️⃣ Keyingi urinishlar — {retry:,} so'm\n\n"
         "🎓 <b>Atestatsiya</b> — {attest:,} so'm (bir martalik)\n\n"
-        "📞 Muammo bo'lsa: @admin_username".format(
+        "📞 Muammo bo'lsa:O'qituvchi: @TemurDavletov1, 💻Dasturchi: @Iskandarovdev".format(
             retry=config.PRICE_RETRY,
             attest=config.PRICE_ATTESTATION
         ),

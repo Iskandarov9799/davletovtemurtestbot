@@ -177,7 +177,7 @@ function renderQuestion(i) {
 
   document.getElementById('btn-skip').style.display = 'inline-flex';
   document.getElementById('btn-next').style.display = 'none';
-  document.getElementById('btn-end').style.display = 'none';
+  document.getElementById('btn-finish').style.display = 'none';
 
   if (isWritten(q)) {
     renderWrittenQuestion(q);
@@ -289,7 +289,7 @@ function selectOption(label) {
   const isLast  = current === questions.length - 1;
   const allDone = answers.every(a => a !== null);
   if (allDone || isLast) {
-    document.getElementById('btn-end').style.display = 'inline-flex';
+    document.getElementById('btn-finish').style.display = 'inline-flex';
   } else {
     document.getElementById('btn-next').style.display = 'inline-flex';
   }
@@ -380,7 +380,7 @@ function submitWritten() {
   const isLast  = current === questions.length - 1;
   const allDone = answers.every(a => a !== null);
   if (allDone || isLast) {
-    document.getElementById('btn-end').style.display = 'inline-flex';
+    document.getElementById('btn-finish').style.display = 'inline-flex';
   } else {
     document.getElementById('btn-next').style.display = 'inline-flex';
   }
@@ -495,6 +495,21 @@ function sendResult() {
 
   const pct = total > 0 ? Math.round(correct / total * 100) : 0;
 
+  // Xato va to'g'ri savol IDlarini yig'ish
+  const wrongIds   = [];
+  const correctIds = [];
+  answers.forEach((a, i) => {
+    const qid = questions[i]?.id;
+    if (!qid) return;
+    if (a === 'wrong') wrongIds.push(qid);
+    else if (a === 'correct') correctIds.push(qid);
+    else if (typeof a === 'object' && a !== null) {
+      const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
+      if (allOk) correctIds.push(qid);
+      else wrongIds.push(qid);
+    }
+  });
+
   const payload = JSON.stringify({
     correct, wrong, skip, total, score: pct,
     subject:        meta.subject        || 'onatili',
@@ -502,6 +517,8 @@ function sendResult() {
     subcategory:    meta.subcategory    || null,
     difficulty:     meta.difficulty     || null,
     is_attestation: meta.is_attestation || false,
+    wrong_ids:   wrongIds,
+    correct_ids: correctIds,
   });
 
   if (tg) {
