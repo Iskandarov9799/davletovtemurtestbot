@@ -631,14 +631,41 @@ async def get_full_stats() -> dict:
             r = await s.execute(q)
             return r.scalar() or 0
 
+        from database.models import Subscription
+        now = datetime.utcnow()
+
         stats = {
+            # Foydalanuvchilar
             'total_users':         await scalar(select(func.count()).select_from(User)),
             'registered':          await scalar(select(func.count()).select_from(User).where(User.is_registered == True)),
+            # To'lovlar
             'pending':             await scalar(select(func.count()).select_from(Purchase).where(Purchase.status == 'pending')),
             'confirmed_purchases': await scalar(select(func.count()).select_from(Purchase).where(Purchase.status == 'confirmed')),
+            # Faol obunalar
+            'active_daily':        await scalar(
+                select(func.count()).select_from(Subscription)
+                .join(Purchase, Subscription.purchase_id == Purchase.id)
+                .where(Subscription.expires_at > now, Subscription.sub_type == 'daily',
+                       Purchase.status == 'confirmed')
+            ),
+            'active_monthly':      await scalar(
+                select(func.count()).select_from(Subscription)
+                .join(Purchase, Subscription.purchase_id == Purchase.id)
+                .where(Subscription.expires_at > now, Subscription.sub_type == 'monthly',
+                       Purchase.status == 'confirmed')
+            ),
+            # Testlar
             'total_tests':         await scalar(select(func.count()).select_from(TestResult)),
+            'today_tests':         await scalar(
+                select(func.count()).select_from(TestResult)
+                .where(TestResult.finished_at >= datetime(now.year, now.month, now.day))
+            ),
+            # Savollar
             'total_questions':     await scalar(select(func.count()).select_from(Question)),
-            'attestation_q':       await scalar(select(func.count()).select_from(Question).where(Question.is_attestation == True)),
+            'onatili_q':           await scalar(select(func.count()).select_from(Question).where(Question.subject == 'onatili')),
+            'adabiyot_q':          await scalar(select(func.count()).select_from(Question).where(Question.subject == 'adabiyot')),
+            'attestation_q':       await scalar(select(func.count()).select_from(Question).where(Question.subject == 'attestation')),
+            'milliy_q':            await scalar(select(func.count()).select_from(Question).where(Question.subject == 'milliy')),
         }
         avg_r = await s.execute(select(func.avg(TestResult.score)))
         avg = avg_r.scalar()
