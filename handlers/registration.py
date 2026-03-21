@@ -120,17 +120,27 @@ async def menu_attestation(message: Message, state: FSMContext):
     if not await is_registered(message.from_user.id):
         await message.answer("❌ Avval ro'yxatdan o'ting! /start")
         return
-    from keyboards.keyboards import InlineKeyboardMarkup, InlineKeyboardButton
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    await message.answer(
-        "🎓 <b>Atestatsiya</b>\n\n"
-        "Fan tanlang:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📚 Ona tili atestatsiyasi",  callback_data="onatili:attestation")],
-            [InlineKeyboardButton(text="📖 Adabiyot atestatsiyasi",  callback_data="adabiyot:attestation")],
-        ]),
-        parse_mode="HTML"
-    )
+    from database.db import has_attestation, count_questions
+    from config import config
+    tid = message.from_user.id
+    if await has_attestation(tid, "attestation"):
+        cnt = await count_questions(subject="attestation", category="attestation", is_attestation=True)
+        if cnt == 0:
+            await message.answer("❌ Attestatsiya savollari hali qo'shilmagan.")
+            return
+        from handlers.test_handler import attestation_menu as _attest
+        await _attest(message)
+    else:
+        from keyboards.keyboards import attestation_buy_standalone_keyboard
+        await message.answer(
+            "🎓 <b>Atestatsiya</b>\n\n"
+            "📋 35 ta belgilangan savol\n"
+            "(Ona tili + Adabiyot aralash)\n"
+            "💳 Bir martalik to'lov\n\n"
+            f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>",
+            reply_markup=attestation_buy_standalone_keyboard(),
+            parse_mode="HTML"
+        )
 
 @router.message(F.text == "📊 Natijalarim")
 async def menu_results(message: Message):

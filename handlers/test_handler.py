@@ -546,7 +546,14 @@ async def receive_miniapp_result(message: Message):
         elif pct >= 50: grade, emoji = "Qoniqarli (3)",  "📚"
         else:           grade, emoji = "Qoniqarsiz (2)", "😔"
 
-        await message.answer(
+        user = message.from_user
+        uname = f"@{user.username}" if user.username else user.full_name or str(tid)
+
+        SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot',
+                'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy'}
+        subj_label = SUBJ.get(data.get('subject',''), data.get('subject',''))
+
+        result_text = (
             f"{emoji} <b>Test natijasi!</b>\n\n"
             f"━━━━━━━━━━━━━\n"
             f"✅ To'g'ri:    <b>{correct}/{total}</b>\n"
@@ -554,8 +561,25 @@ async def receive_miniapp_result(message: Message):
             f"⏭ O'tkazildi: <b>{skipped}</b>\n"
             f"📈 Ball:       <b>{pct}%</b>\n"
             f"🎓 Baho:       <b>{grade}</b>\n"
-            f"━━━━━━━━━━━━━",
-            reply_markup=main_menu_keyboard()
+            f"━━━━━━━━━━━━━"
         )
+
+        await message.answer(result_text, reply_markup=main_menu_keyboard())
+
+        # Guruhga natija yuborish
+        if config.RESULT_GROUP_ID:
+            try:
+                group_text = (
+                    f"{emoji} <b>{uname}</b> — {subj_label}\n"
+                    f"✅ {correct}/{total}  |  📈 {pct}%  |  🎓 {grade}"
+                )
+                await message.bot.send_message(
+                    chat_id=config.RESULT_GROUP_ID,
+                    text=group_text,
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
     except Exception as e:
         await message.answer(f"❌ Xato: {e}")

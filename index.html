@@ -116,17 +116,8 @@
       border-radius: 11px; font-size: 13px; font-weight: 600;
       display: none; align-items: center; gap: 8px;
     }
-    .fb.ok      { display: flex; background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: #10b981; }
-    .fb.err     { display: flex; background: rgba(244,63,94,0.12);  border: 1px solid rgba(244,63,94,0.3);  color: #f43f5e; }
-    .fb.partial { display: flex; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; }
-    .written-hint       { font-size: 14px; color: #94a3b8; margin: 12px 16px 6px; }
-    .written-part-label { font-size: 13px; color: #64748b; margin: 10px 16px 4px; font-weight: 600; }
-    .written-textarea   { width: calc(100% - 32px); margin: 0 16px; background: #1e2d45; border: 1.5px solid #2d3f5a; border-radius: 12px; color: #f1f5f9; font-size: 15px; padding: 12px; font-family: inherit; resize: vertical; min-height: 80px; }
-    .written-textarea:focus { outline: none; border-color: #3b82f6; }
-    .written-textarea:disabled { opacity: 0.7; }
-    .written-submit-btn { margin: 12px 16px; width: calc(100% - 32px); padding: 14px; background: linear-gradient(135deg,#3b82f6,#6366f1); color: white; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
-    .shake { animation: shake 0.4s ease; }
-    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .fb.ok  { display: flex; background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: #10b981; }
+    .fb.err { display: flex; background: rgba(244,63,94,0.12);  border: 1px solid rgba(244,63,94,0.3);  color: #f43f5e; }
 
     /* ACTIONS */
     .acts { padding: 10px 16px; display: flex; gap: 8px; }
@@ -156,6 +147,16 @@
     .gbtn.skp { background: #f59e0b; border-color: #f59e0b; color: white; }
 
     /* RESULT */
+    .result-item { padding: 10px 14px; margin: 6px 16px; border-radius: 10px; font-size: 13px; }
+    .result-item.ok  { background: rgba(16,185,129,0.08); border-left: 3px solid #10b981; }
+    .result-item.err { background: rgba(244,63,94,0.08);  border-left: 3px solid #f43f5e; }
+    .result-item.skp { background: rgba(245,158,11,0.08); border-left: 3px solid #f59e0b; }
+    .ri-num  { font-size: 12px; opacity: 0.6; margin-bottom: 4px; }
+    .ri-q    { font-size: 13px; color: #f1f5f9; margin-bottom: 4px; line-height: 1.4; }
+    .ri-ans  { font-size: 12px; color: #94a3b8; }
+    .sol-link { font-size: 12px; color: #60a5fa; text-decoration: underline; display: inline-block; margin-top: 4px; }
+    .result-answers { margin-top: 16px; }
+    .result-answers-title { font-size: 13px; font-weight: 600; color: #94a3b8; padding: 0 16px; margin-bottom: 8px; }
     #result-screen {
       flex-direction: column; align-items: center;
       padding: 32px 16px 40px;
@@ -262,6 +263,12 @@
   <div class="r-gbox">
     <div class="r-glbl">Har bir savol natijasi</div>
     <div class="grid" id="result-grid"></div>
+    <p style="font-size:12px;color:#94a3b8;margin-top:8px;">⏭ Sariq — o'tkazilgan, bosib qaytib ishlang</p>
+  </div>
+
+  <div class="r-gbox">
+    <div class="r-glbl">To'g'ri javoblar</div>
+    <div id="answer-list"></div>
   </div>
 
   <button class="btn-send" onclick="sendResult()">📤 Natijani yuborish</button>

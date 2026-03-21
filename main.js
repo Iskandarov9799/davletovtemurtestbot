@@ -272,9 +272,11 @@ function selectOption(label) {
   const TEXTS       = { A: q.a, B: q.b, C: q.c, D: q.d };
   const fb          = document.getElementById('fb');
   const solutionUrl = meta.solution_url || '';
-  const linkHtml    = solutionUrl
-    ? `<br><a href="${solutionUrl}" target="_blank" style="color:inherit;opacity:0.85;font-size:12px;text-decoration:underline;">📹 Yechimni ko'rish</a>`
-    : '';
+  const qid = q.id || '';
+  const qidHtml = qid ? `<br><span style="font-size:11px;opacity:0.6;">ID: ${qid}</span>` : '';
+  const linkHtml = solutionUrl
+    ? `${qidHtml}<br><a href="${solutionUrl}" target="_blank" style="color:inherit;opacity:0.85;font-size:12px;text-decoration:underline;">📹 Yechimni ko'rish (ID: ${qid})</a>`
+    : qidHtml;
 
   fb.style.display = 'flex';
   if (isOk) {
@@ -468,8 +470,31 @@ function showResult() {
       d.className = 'gbtn ' + (colMap[a] || '');
     }
     d.textContent = i + 1;
+    if (a === 'skip' || a === null) {
+      d.onclick = () => retrySkipped(i);
+      d.title = 'Bosing — bu savolga qaytish';
+      d.style.cursor = 'pointer';
+      d.style.border = '2px solid #f59e0b';
+    }
     rg.appendChild(d);
   });
+
+  // To'g'ri javoblar ro'yxati
+  const answerList = document.getElementById('answer-list');
+  if (answerList) {
+    answerList.innerHTML = '';
+    questions.forEach((q, i) => {
+      if (q.type === 'written') return;
+      const TEXTS = { A: q.a, B: q.b, C: q.c, D: q.d };
+      const userAns = answers[i];
+      const correctKey = q.ok || q.correct_answer || '';
+      const icon = userAns === 'correct' ? '✅' : userAns === 'skip' || userAns === null ? '⏭' : '❌';
+      const div = document.createElement('div');
+      div.style.cssText = 'font-size:13px;padding:4px 0;border-bottom:0.5px solid rgba(255,255,255,0.08);';
+      div.innerHTML = `${icon} <b>${i+1}.</b> ${q.t || ''}<br><span style="opacity:0.7;font-size:12px;">✅ ${correctKey}) ${TEXTS[correctKey]||''}</span>`;
+      answerList.appendChild(div);
+    });
+  }
 
   if (tg) {
     tg.MainButton.setText('📤 Natijani yuborish');
@@ -477,6 +502,22 @@ function showResult() {
     tg.MainButton.onClick(sendResult);
   }
   tg?.HapticFeedback?.notificationOccurred('success');
+}
+
+function retrySkipped(idx) {
+  // O'tkazilgan savolga qaytish
+  const skippedIndexes = answers
+    .map((a, i) => (a === 'skip' || a === null) ? i : -1)
+    .filter(i => i >= 0);
+  if (skippedIndexes.length === 0) return;
+
+  // Natija ekranini yashirib, test ekranini ko'rsatish
+  document.getElementById('result-screen').style.display = 'none';
+  document.getElementById('test-screen').style.display   = 'block';
+
+  answers[idx] = null;
+  current = idx;
+  renderQuestion(idx);
 }
 
 function sendResult() {
@@ -495,21 +536,6 @@ function sendResult() {
 
   const pct = total > 0 ? Math.round(correct / total * 100) : 0;
 
-  // Xato va to'g'ri savol IDlarini yig'ish
-  const wrongIds   = [];
-  const correctIds = [];
-  answers.forEach((a, i) => {
-    const qid = questions[i]?.id;
-    if (!qid) return;
-    if (a === 'wrong') wrongIds.push(qid);
-    else if (a === 'correct') correctIds.push(qid);
-    else if (typeof a === 'object' && a !== null) {
-      const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
-      if (allOk) correctIds.push(qid);
-      else wrongIds.push(qid);
-    }
-  });
-
   const payload = JSON.stringify({
     correct, wrong, skip, total, score: pct,
     subject:        meta.subject        || 'onatili',
@@ -517,8 +543,6 @@ function sendResult() {
     subcategory:    meta.subcategory    || null,
     difficulty:     meta.difficulty     || null,
     is_attestation: meta.is_attestation || false,
-    wrong_ids:   wrongIds,
-    correct_ids: correctIds,
   });
 
   if (tg) {
@@ -533,5 +557,6 @@ window.nextQuestion  = nextQuestion;
 window.showResult    = showResult;
 window.sendResult    = sendResult;
 window.submitWritten = submitWritten;
+window.retrySkipped  = retrySkipped;
 
 loadQuestionsFromHash();
