@@ -6,7 +6,9 @@ from aiogram.fsm.context import FSMContext
 
 from database.db import (
     get_all_users, get_full_stats, add_question,
-    count_questions, delete_all_questions, delete_questions_by_filter
+    count_questions, delete_all_questions, delete_questions_by_filter,
+    get_user_tariff, admin_grant_subscription, admin_revoke_subscription,
+    grant_attestation
 )
 from keyboards.keyboards import (
     admin_keyboard, cancel_keyboard, main_menu_keyboard,
