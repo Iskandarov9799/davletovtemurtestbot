@@ -463,6 +463,9 @@ function findNextByStatus(from, status) {
 // ══════════════════════════════════════════════
 
 function showResult() {
+  // ✅ QO'SHILDI: Skip va null savollarni xato deb belgilash
+  answers = answers.map(a => (a === null || a === 'skip') ? 'wrong' : a);
+
   const total   = questions.length;
   let correct   = 0, wrong = 0, skip = 0, writtenCorrect = 0, writtenWrong = 0;
 
@@ -536,8 +539,8 @@ function showResult() {
   }
 
   tg?.HapticFeedback?.notificationOccurred('success');
-  // Natijani avtomatik yuborish
-  setTimeout(() => sendResult(), 500);
+  // ✅ QO'SHILDI: Natijani avtomatik yuborish
+  setTimeout(() => sendResult(), 800);
 }
 
 function retrySkipped(idx) {
