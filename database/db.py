@@ -65,11 +65,12 @@ async def get_user_tariff(telegram_id: int) -> dict:
              .where(Purchase.status == 'confirmed')
              .order_by(Subscription.expires_at.desc())
         )
-        sub = sub.scalar_one_or_none()
+        sub = sub.scalars().first()
         if sub:
+            LABELS = {'daily': 'Kunlik', 'monthly': 'Oylik', 'yearly': 'Yillik'}
             return {
                 'type': sub.sub_type,
-                'label': 'Kunlik' if sub.sub_type == 'daily' else 'Oylik',
+                'label': LABELS.get(sub.sub_type, sub.sub_type),
                 'expires': str(sub.expires_at)[:16]
             }
         # Attestatsiya
@@ -78,7 +79,7 @@ async def get_user_tariff(telegram_id: int) -> dict:
                 AttestationAccess.telegram_id == telegram_id
             )
         )
-        if att.scalar_one_or_none():
+        if att.scalars().first():
             return {'type': 'attestation', 'label': 'Attestatsiya', 'expires': None}
         return {'type': 'free', 'label': 'Bepul', 'expires': None}
 
