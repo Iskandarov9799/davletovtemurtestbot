@@ -138,7 +138,10 @@ function updateGrid() {
 }
 
 function jumpTo(i) {
-  if (answers[i] !== null) return;
+  // Faqat javob berilgan (correct/wrong/object) savollarga o'tib bo'lmaydi
+  // null va skip uchun o'tish mumkin
+  if (answers[i] !== null && answers[i] !== 'skip') return;
+  if (answers[i] === 'skip') answers[i] = null; // qayta ishlash uchun reset
   current = i;
   renderQuestion(i);
 }
@@ -398,23 +401,44 @@ function submitWritten() {
 function skipQuestion() {
   answers[current] = 'skip';
   updateGrid();
-  // Avval null (hali ishlanmagan) savollarni qidir
-  const nextNull = findNextByStatus(current + 1, null);
-  if (nextNull !== -1) { current = nextNull; renderQuestion(current); return; }
-  // Null qolmasa, skip savollarni qidir
-  const nextSkip = findNextByStatus(current + 1, 'skip');
-  if (nextSkip !== -1) { current = nextSkip; renderQuestion(current); return; }
+
+  // 1. Avval current+1 dan boshlab null savollarni qidir
+  for (let i = current + 1; i < questions.length; i++) {
+    if (answers[i] === null) { current = i; renderQuestion(i); return; }
+  }
+  // 2. Boshidan null savollarni qidir
+  for (let i = 0; i < current; i++) {
+    if (answers[i] === null) { current = i; renderQuestion(i); return; }
+  }
+  // 3. Null qolmadi — endi skip savollarni qidir (current+1 dan)
+  for (let i = current + 1; i < questions.length; i++) {
+    if (answers[i] === 'skip') { current = i; renderQuestion(i); return; }
+  }
+  // 4. Boshidan skip savollarni qidir
+  for (let i = 0; i < current; i++) {
+    if (answers[i] === 'skip') { current = i; renderQuestion(i); return; }
+  }
+  // 5. Hamma savol tugadi
   showResult();
 }
 
 function nextQuestion() {
-  const next = findNext(current + 1);
-  if (next !== -1) { current = next; renderQuestion(current); }
-  else showResult();
+  // 1. current+1 dan null savol qidir
+  for (let i = current + 1; i < questions.length; i++) {
+    if (answers[i] === null) { current = i; renderQuestion(i); return; }
+  }
+  // 2. Boshidan null savol qidir
+  for (let i = 0; i <= current; i++) {
+    if (answers[i] === null) { current = i; renderQuestion(i); return; }
+  }
+  // 3. Skip savollar bormi
+  for (let i = 0; i < questions.length; i++) {
+    if (answers[i] === 'skip') { current = i; renderQuestion(i); return; }
+  }
+  showResult();
 }
 
 function findNext(from) {
-  // null yoki skip bo'lgan savollarni topadi
   for (let i = from; i < questions.length; i++) {
     if (answers[i] === null || answers[i] === 'skip') return i;
   }
@@ -548,6 +572,20 @@ function sendResult() {
 
   const pct = total > 0 ? Math.round(correct / total * 100) : 0;
 
+  // Xato va to'g'ri savol IDlarini yig'ish
+  const wrongIds   = [];
+  const correctIds = [];
+  answers.forEach((a, i) => {
+    const qid = questions[i]?.id;
+    if (!qid) return;
+    if (a === 'wrong') wrongIds.push(qid);
+    else if (a === 'correct') correctIds.push(qid);
+    else if (typeof a === 'object' && a !== null) {
+      const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
+      if (allOk) correctIds.push(qid); else wrongIds.push(qid);
+    }
+  });
+
   const payload = JSON.stringify({
     correct, wrong, skip, total, score: pct,
     subject:        meta.subject        || 'onatili',
@@ -555,6 +593,8 @@ function sendResult() {
     subcategory:    meta.subcategory    || null,
     difficulty:     meta.difficulty     || null,
     is_attestation: meta.is_attestation || false,
+    wrong_ids:   wrongIds,
+    correct_ids: correctIds,
   });
 
   if (tg) {

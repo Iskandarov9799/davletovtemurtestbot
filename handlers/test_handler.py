@@ -574,12 +574,13 @@ async def receive_miniapp_result(message: Message):
                     f"✅ {correct}/{total}  |  📈 {pct}%  |  🎓 {grade}"
                 )
                 await message.bot.send_message(
-                    chat_id=config.RESULT_GROUP_ID,
+                    chat_id=int(config.RESULT_GROUP_ID),
                     text=group_text,
                     parse_mode="HTML"
                 )
-            except Exception:
-                pass
+                logger.info(f"Guruhga natija yuborildi: {uname} {pct}%")
+            except Exception as e:
+                logger.error(f"Guruhga yuborishda xato: {e}")
 
     except Exception as e:
         await message.answer(f"❌ Xato: {e}")
