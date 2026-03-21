@@ -434,16 +434,18 @@ async def get_questions(subject: str, category: str,
 
 async def count_questions(subject: str = None, category: str = None,
                            subcategory: str = None, difficulty: str = None,
-                           is_attestation: bool = False) -> int:
-    """FIX: subject ixtiyoriy — question_editor barcha savollarni hisoblash uchun"""
+                           is_attestation: bool = False,
+                           subcategory_prefix: str = None) -> int:
+    """subcategory_prefix — LIKE filter, masalan '10_' barcha 10-sinf boblarini topadi."""
     async with _conn.AsyncSessionLocal() as s:
         filters = []
         if subject:        filters.append(Question.subject == subject)
         if is_attestation: filters.append(Question.is_attestation == True)
         else:
-            if category:    filters.append(Question.category == category)
-            if subcategory: filters.append(Question.subcategory == subcategory)
-            if difficulty:  filters.append(Question.difficulty == difficulty)
+            if category:           filters.append(Question.category == category)
+            if subcategory:        filters.append(Question.subcategory == subcategory)
+            if subcategory_prefix: filters.append(Question.subcategory.like(f"{subcategory_prefix}%"))
+            if difficulty:         filters.append(Question.difficulty == difficulty)
 
         q = select(func.count()).select_from(Question)
         if filters:
@@ -644,13 +646,15 @@ async def get_full_stats() -> dict:
         return stats
 
 async def delete_questions_by_filter(subject: str = None, category: str = None,
-                                       subcategory: str = None) -> int:
-    """Bo'lim bo'yicha savollarni o'chirish."""
+                                       subcategory: str = None,
+                                       subcategory_prefix: str = None) -> int:
+    """Bo'lim bo'yicha savollarni o'chirish. subcategory_prefix — LIKE filter."""
     async with _conn.AsyncSessionLocal() as s:
         filters = []
-        if subject:     filters.append(Question.subject == subject)
-        if category:    filters.append(Question.category == category)
-        if subcategory: filters.append(Question.subcategory == subcategory)
+        if subject:            filters.append(Question.subject == subject)
+        if category:           filters.append(Question.category == category)
+        if subcategory:        filters.append(Question.subcategory == subcategory)
+        if subcategory_prefix: filters.append(Question.subcategory.like(f"{subcategory_prefix}%"))
         q = delete(Question)
         if filters:
             q = q.where(*filters)

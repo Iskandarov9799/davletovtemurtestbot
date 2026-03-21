@@ -591,7 +591,11 @@ async def section_manage_subject(callback: CallbackQuery):
         # Sinflarni ko'rsatish
         btns = []
         for grade, label in config.GRADES.items():
-            cnt = await count_questions(subject='adabiyot', category='sinf', subcategory=grade)
+            # grade_bob formatdagi savollar: 10_1, 10_2 ... prefix = "10_"
+            cnt = await count_questions(subject='adabiyot', category='sinf',
+                                        subcategory_prefix=f"{grade}_")
+            # + sinf aralash (subcategory=grade)
+            cnt += await count_questions(subject='adabiyot', category='sinf', subcategory=grade)
             btns.append([InlineKeyboardButton(
                 text=f"{label} ({cnt} savol)",
                 callback_data=f"smng_grade:{grade}"
@@ -614,11 +618,9 @@ async def section_manage_subject(callback: CallbackQuery):
         # Ona tili bo'limlari
         btns = []
         for key, label in config.ONA_TILI_BOLIMLAR.items():
-            cnt = await count_questions(subject='onatili', category='mavzu', subcategory=key)
-            # Submavzularini ham hisoblash
-            for sub_key in config.ONA_TILI_SUBMAVZULAR.get(key, {}).keys():
-                cnt += await count_questions(subject='onatili', category='mavzu',
-                                              subcategory=f"{key}_{sub_key}")
+            # key va key_submavzu formatdagi barchasi: prefix = "key"
+            cnt = await count_questions(subject='onatili', category='mavzu',
+                                        subcategory_prefix=key)
             btns.append([InlineKeyboardButton(
                 text=f"{label} ({cnt} savol)",
                 callback_data=f"smng_onatili:{key}"
@@ -667,10 +669,12 @@ async def section_manage_grade(callback: CallbackQuery):
             callback_data=f"smng_bob:{grade}:{bob_key}"
         )])
     # Sinf umumiy (barcha boblar)
-    cnt_all = await count_questions(subject='adabiyot', category='sinf', subcategory=grade)
+    cnt_all = await count_questions(subject='adabiyot', category='sinf',
+                                    subcategory_prefix=f"{grade}_")
+    cnt_all += await count_questions(subject='adabiyot', category='sinf', subcategory=grade)
     btns.append([InlineKeyboardButton(
         text=f"🗑 Butun {label}ni o'chirish ({cnt_all} savol)",
-        callback_data=f"smng_del:adabiyot:sinf:{grade}"
+        callback_data=f"smng_del:adabiyot:sinf_all:{grade}"
     )])
     btns.append([InlineKeyboardButton(text="⬅️ Orqaga", callback_data="smng:adabiyot")])
 
@@ -718,11 +722,12 @@ async def section_manage_onatili(callback: CallbackQuery):
                 text=f"{sub_label} ({cnt} savol)",
                 callback_data=f"smng_sub:{bolim}:{sub_key}"
             )])
-    # Umumiy bo'lim
-    cnt_all = await count_questions(subject='onatili', category='mavzu', subcategory=bolim)
+    # Umumiy bo'lim (barcha submavzular bilan)
+    cnt_all = await count_questions(subject='onatili', category='mavzu',
+                                    subcategory_prefix=bolim)
     btns.append([InlineKeyboardButton(
         text=f"🗑 Butun bo'limni o'chirish ({cnt_all} savol)",
-        callback_data=f"smng_del:onatili:mavzu:{bolim}"
+        callback_data=f"smng_del:onatili:mavzu_all:{bolim}"
     )])
     btns.append([InlineKeyboardButton(text="⬅️ Orqaga", callback_data="smng:onatili")])
 
@@ -779,22 +784,33 @@ async def section_manage_cat(callback: CallbackQuery):
 async def section_delete_confirm(callback: CallbackQuery):
     parts    = callback.data.split(":")
     subject  = parts[1]
-    category = parts[2]
-    sub      = parts[3] if len(parts) > 3 else None
+    category = parts[2]   # sinf_all | mavzu_all | sinf | mavzu | aralash | all
+    sub      = parts[3] if len(parts) > 3 else 'all'
 
-    if sub == 'all':
-        sub = None
+    # Savollar sonini hisoblash
+    if category == 'sinf_all':
+        # Butun sinf: grade_ prefix + grade subcategory
+        cnt  = await count_questions(subject=subject, category='sinf', subcategory_prefix=f"{sub}_")
+        cnt += await count_questions(subject=subject, category='sinf', subcategory=sub)
+        cat_label = f"{config.GRADES.get(sub, sub)} (barcha boblar)"
+    elif category == 'mavzu_all':
+        # Butun ona tili bo'limi: bolim prefix
+        cnt = await count_questions(subject=subject, category='mavzu', subcategory_prefix=sub)
+        cat_label = f"{config.ONA_TILI_BOLIMLAR.get(sub, sub)} (barcha submavzular)"
+    elif sub == 'all' or not sub:
+        cnt = await count_questions(subject=subject, category=category if category != 'all' else None)
+        cat_label = category
+    else:
+        cnt = await count_questions(subject=subject, category=category, subcategory=sub)
+        cat_label = f"{category} › {sub}"
 
-    cnt = await count_questions(subject=subject, category=category, subcategory=sub)
-
-    sub_label = f" › {sub}" if sub else ""
     await callback.message.edit_text(
         f"⚠️ <b>Tasdiqlang!</b>\n\n"
-        f"<b>{subject}/{category}{sub_label}</b>\n"
+        f"📂 <b>{cat_label}</b>\n"
         f"<b>{cnt} ta</b> savol o'chiriladi!",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="🗑 Ha, o'chirish",
-                                 callback_data=f"smng_del_ok:{subject}:{category}:{sub or 'all'}"),
+            InlineKeyboardButton(text=f"🗑 Ha, {cnt} ta o'chirish",
+                                 callback_data=f"smng_del_ok:{subject}:{category}:{sub}"),
             InlineKeyboardButton(text="❌ Bekor", callback_data="smng:cancel"),
         ]]),
         parse_mode="HTML"
@@ -807,13 +823,25 @@ async def section_delete_execute(callback: CallbackQuery):
     parts    = callback.data.split(":")
     subject  = parts[1]
     category = parts[2]
-    sub      = parts[3] if parts[3] != 'all' else None
+    sub      = parts[3] if len(parts) > 3 else 'all'
 
-    deleted = await delete_questions_by_filter(
-        subject=subject,
-        category=category if category != 'all' else None,
-        subcategory=sub
-    )
+    if category == 'sinf_all':
+        d1 = await delete_questions_by_filter(subject=subject, category='sinf',
+                                               subcategory_prefix=f"{sub}_")
+        d2 = await delete_questions_by_filter(subject=subject, category='sinf', subcategory=sub)
+        deleted = d1 + d2
+    elif category == 'mavzu_all':
+        deleted = await delete_questions_by_filter(subject=subject, category='mavzu',
+                                                    subcategory_prefix=sub)
+    elif sub == 'all':
+        deleted = await delete_questions_by_filter(
+            subject=subject,
+            category=category if category != 'all' else None
+        )
+    else:
+        deleted = await delete_questions_by_filter(
+            subject=subject, category=category, subcategory=sub
+        )
 
     await callback.message.edit_text(
         f"✅ <b>{deleted} ta</b> savol o'chirildi!",
