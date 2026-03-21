@@ -4,18 +4,18 @@ class RegistrationStates(StatesGroup):
     waiting_for_phone = State()
 
 class MenuStates(StatesGroup):
-    main    = State()
-    subject = State()
+    main          = State()
+    subject       = State()
 
 class OnatiliStates(StatesGroup):
-    category   = State()
-    topic      = State()
-    difficulty = State()
+    category    = State()
+    topic       = State()
+    difficulty  = State()
 
 class AdabiyotStates(StatesGroup):
-    category   = State()
-    grade      = State()
-    difficulty = State()
+    category    = State()
+    grade       = State()
+    difficulty  = State()
 
 class AttestationStates(StatesGroup):
     choose_format = State()
