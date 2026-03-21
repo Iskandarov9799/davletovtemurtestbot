@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 
 from database.db import (
     get_all_users, get_full_stats, add_question,
-    count_questions, delete_all_questions
+    count_questions, delete_all_questions, delete_questions_by_filter
 )
 from keyboards.keyboards import (
     admin_keyboard, cancel_keyboard, main_menu_keyboard,
@@ -491,6 +491,227 @@ async def delete_questions_execute(callback: CallbackQuery):
 @router.callback_query(F.data == "admin:cancel_delete")
 async def delete_questions_cancel(callback: CallbackQuery):
     await callback.message.edit_text("❌ Bekor qilindi.")
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# BO'LIM BO'YICHA O'CHIRISH
+# ══════════════════════════════════════════════
+
+@router.message(F.text == "🗂 Bo'lim o'chirish")
+async def delete_by_section_start(message: Message):
+    if not is_admin(message): return
+    await message.answer(
+        "🗂 <b>Qaysi fanni tozalash kerak?</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📚 Ona tili",          callback_data="del_sec:onatili")],
+            [InlineKeyboardButton(text="📖 Adabiyot",          callback_data="del_sec:adabiyot")],
+            [InlineKeyboardButton(text="🎓 Attestatsiya",      callback_data="del_sec:attestation")],
+            [InlineKeyboardButton(text="🏅 Milliy sertifikat", callback_data="del_sec:milliy")],
+            [InlineKeyboardButton(text="🗑 Barchasi",          callback_data="del_sec:all")],
+            [InlineKeyboardButton(text="❌ Bekor",             callback_data="del_sec:cancel")],
+        ]),
+        parse_mode="HTML"
+    )
+
+@router.callback_query(F.data.startswith("del_sec:"))
+async def delete_by_section_confirm(callback: CallbackQuery):
+    subject = callback.data.split(":")[1]
+    if subject == "cancel":
+        await callback.message.edit_text("❌ Bekor qilindi.")
+        await callback.answer()
+        return
+
+    LABELS = {
+        'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot',
+        'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy sertifikat',
+        'all': '🗑 Barcha savollar'
+    }
+    label = LABELS.get(subject, subject)
+
+    if subject == 'all':
+        cnt = await count_questions()
+    else:
+        cnt = await count_questions(subject=subject)
+
+    await callback.message.edit_text(
+        f"⚠️ <b>Diqqat!</b>
+
+"
+        f"<b>{label}</b> bo'limida <b>{cnt} ta</b> savol bor.
+"
+        f"Barchasini o'chirishni tasdiqlaysizmi?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🗑 Ha, o'chirish", callback_data=f"del_sec_ok:{subject}"),
+                InlineKeyboardButton(text="❌ Yo'q",          callback_data="del_sec:cancel"),
+            ]
+        ]),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("del_sec_ok:"))
+async def delete_by_section_execute(callback: CallbackQuery):
+    subject = callback.data.split(":")[1]
+    LABELS = {
+        'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot',
+        'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy sertifikat',
+        'all': '🗑 Barcha savollar'
+    }
+    label = LABELS.get(subject, subject)
+
+    if subject == 'all':
+        deleted = await delete_all_questions()
+    else:
+        deleted = await delete_questions_by_filter(subject=subject)
+
+    await callback.message.edit_text(
+        f"✅ <b>{label}</b> — <b>{deleted} ta</b> savol o'chirildi!",
+        parse_mode="HTML"
+    )
+    await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
+    await callback.answer()
+
+# ══════════════════════════════════════════════
+# A'ZOLAR KO'RISH VA TARIF BOSHQARISH
+# ══════════════════════════════════════════════
+
+@router.message(F.text == "👥 A'zolar")
+async def members_list(message: Message):
+    if not is_admin(message): return
+    users      = await get_all_users()
+    total      = len(users)
+    registered = sum(1 for u in users if u.is_registered)
+    text = (
+        f"👥 <b>A'zolar: {total} ta</b>\n"
+        f"✅ Ro'yxatdan o'tgan: <b>{registered}</b>\n"
+        f"👤 O'tmagan: <b>{total - registered}</b>\n\n"
+        f"Batafsil ko'rish uchun:"
+    )
+    await message.answer(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Ro'yxat", callback_data="members:list:0")],
+            [InlineKeyboardButton(text="🔍 Qidirish (ID yoki @username)", callback_data="members:search")],
+        ]),
+        parse_mode="HTML"
+    )
+
+@router.callback_query(F.data.startswith("members:list:"))
+async def members_list_page(callback: CallbackQuery):
+    offset = int(callback.data.split(":")[2])
+    users  = await get_all_users()
+    total  = len(users)
+    page   = users[offset:offset + 25]
+    TICONS = {"daily": "📅", "monthly": "📆", "yearly": "🗓", "attestation": "🎓", "free": "🆓"}
+    text   = f"👥 <b>A'zolar {offset+1}–{min(offset+25, total)} / {total}</b>\n\n"
+    for u in page:
+        tariff = await get_user_tariff(u.telegram_id)
+        icon   = TICONS.get(tariff["type"], "🆓")
+        uname  = f"@{u.username}" if u.username else "—"
+        phone  = u.phone_number or "—"
+        date   = str(u.registered_at)[:10] if u.registered_at else "—"
+        text  += f"{icon} <code>{u.telegram_id}</code> <b>{u.full_name or 'Nomsiz'}</b>\n"
+        text  += f"   📱{phone} | {uname} | {date}\n"
+    nav = []
+    if offset > 0:
+        nav.append(InlineKeyboardButton(text="⬅️", callback_data=f"members:list:{offset-25}"))
+    if offset + 25 < total:
+        nav.append(InlineKeyboardButton(text="➡️", callback_data=f"members:list:{offset+25}"))
+    btns = []
+    if nav: btns.append(nav)
+    btns.append([InlineKeyboardButton(text="❌ Yopish", callback_data="members:close")])
+    if len(text) > 4000:
+        text = text[:4000] + "\n..."
+    try:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=btns), parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=btns), parse_mode="HTML")
+    await callback.answer()
+
+@router.callback_query(F.data == "members:search")
+async def members_search_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("🔍 Telegram ID yoki @username yozing:")
+    await state.set_state(AdminStates.search_user)
+    await callback.answer()
+
+@router.message(AdminStates.search_user)
+async def members_search_result(message: Message, state: FSMContext):
+    await state.clear()
+    query = message.text.strip().lstrip("@")
+    users = await get_all_users()
+    found = None
+    for u in users:
+        if str(u.telegram_id) == query or (u.username and u.username.lower() == query.lower()):
+            found = u
+            break
+    if not found:
+        await message.answer("❌ Foydalanuvchi topilmadi.", reply_markup=admin_keyboard())
+        return
+    tariff  = await get_user_tariff(found.telegram_id)
+    TLABELS = {"daily": "📅 Kunlik", "monthly": "📆 Oylik", "yearly": "🗓 Yillik",
+               "attestation": "🎓 Attestatsiya", "free": "🆓 Bepul"}
+    tlabel  = TLABELS.get(tariff["type"], "🆓 Bepul")
+    expires = f" (tugaydi: {tariff['expires']})" if tariff["expires"] else ""
+    text = (
+        f"👤 <b>{found.full_name or 'Nomsiz'}</b>\n\n"
+        f"🆔 <code>{found.telegram_id}</code>\n"
+        f"📱 {found.phone_number or '—'}\n"
+        f"🔗 @{found.username or '—'}\n"
+        f"📅 {str(found.registered_at)[:16] if found.registered_at else '—'}\n"
+        f"💳 Tarif: <b>{tlabel}{expires}</b>"
+    )
+    await message.answer(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📅 Kunlik",  callback_data=f"tariff:daily:{found.telegram_id}"),
+                InlineKeyboardButton(text="📆 Oylik",   callback_data=f"tariff:monthly:{found.telegram_id}"),
+            ],
+            [
+                InlineKeyboardButton(text="🗓 Yillik",       callback_data=f"tariff:yearly:{found.telegram_id}"),
+                InlineKeyboardButton(text="🎓 Attestatsiya", callback_data=f"tariff:attestation:{found.telegram_id}"),
+            ],
+            [InlineKeyboardButton(text="❌ Tarifni bekor qilish", callback_data=f"tariff:revoke:{found.telegram_id}")],
+        ]),
+        parse_mode="HTML"
+    )
+
+@router.callback_query(F.data.startswith("tariff:"))
+async def change_tariff(callback: CallbackQuery, bot: Bot):
+    parts  = callback.data.split(":")
+    action = parts[1]
+    tid    = int(parts[2])
+    LABELS = {
+        "daily": "📅 Kunlik obuna (1 kun)",
+        "monthly": "📆 Oylik obuna (30 kun)",
+        "yearly": "🗓 Yillik obuna (365 kun)",
+        "attestation": "🎓 Attestatsiya",
+        "revoke": "❌ Bekor qilish",
+    }
+    label = LABELS.get(action, action)
+    if action == "revoke":
+        await admin_revoke_subscription(tid)
+        await callback.message.edit_text(f"✅ <code>{tid}</code> — tarif bekor qilindi.", parse_mode="HTML")
+    elif action == "attestation":
+        await grant_attestation(tid, "attestation", "admin")
+        await callback.message.edit_text(f"✅ <code>{tid}</code> — Attestatsiya berildi.", parse_mode="HTML")
+        try:
+            await bot.send_message(tid, "🎓 <b>Attestatsiya huquqi berildi!</b>\n\nTestni boshlashingiz mumkin.", parse_mode="HTML")
+        except Exception:
+            pass
+    else:
+        await admin_grant_subscription(tid, action)
+        await callback.message.edit_text(f"✅ <code>{tid}</code> — {label} berildi.", parse_mode="HTML")
+        try:
+            await bot.send_message(tid, f"🎉 <b>Tarifingiz yangilandi!</b>\n\n{label} faollashtirildi.", parse_mode="HTML")
+        except Exception:
+            pass
+    await callback.answer("✅ Tarif yangilandi!")
+
+@router.callback_query(F.data == "members:close")
+async def members_close(callback: CallbackQuery):
+    await callback.message.delete()
     await callback.answer()
 
 # ══════════════════════════════════════════════

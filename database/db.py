@@ -51,6 +51,89 @@ async def get_all_users():
         r = await s.execute(select(User).order_by(User.registered_at.desc()))
         return r.scalars().all()
 
+async def get_user_tariff(telegram_id: int) -> dict:
+    """Foydalanuvchi tarifini qaytaradi."""
+    from database.models import Subscription
+    now = datetime.utcnow()
+    async with _conn.AsyncSessionLocal() as s:
+        # Faol obuna
+        sub = await s.execute(
+            select(Subscription).where(
+                Subscription.telegram_id == telegram_id,
+                Subscription.expires_at > now
+            ).join(Purchase, Subscription.purchase_id == Purchase.id)
+             .where(Purchase.status == 'confirmed')
+             .order_by(Subscription.expires_at.desc())
+        )
+        sub = sub.scalar_one_or_none()
+        if sub:
+            return {
+                'type': sub.sub_type,
+                'label': 'Kunlik' if sub.sub_type == 'daily' else 'Oylik',
+                'expires': str(sub.expires_at)[:16]
+            }
+        # Attestatsiya
+        att = await s.execute(
+            select(AttestationAccess).where(
+                AttestationAccess.telegram_id == telegram_id
+            )
+        )
+        if att.scalar_one_or_none():
+            return {'type': 'attestation', 'label': 'Attestatsiya', 'expires': None}
+        return {'type': 'free', 'label': 'Bepul', 'expires': None}
+
+async def admin_grant_subscription(telegram_id: int, sub_type: str) -> bool:
+    """Admin tomonidan obuna berish (to'lovsiz)."""
+    from datetime import timedelta
+    from database.models import Subscription
+    now = datetime.utcnow()
+    if sub_type == 'daily':
+        expires = now + timedelta(days=1)
+    elif sub_type == 'monthly':
+        expires = now + timedelta(days=30)
+    elif sub_type == 'yearly':
+        expires = now + timedelta(days=365)
+    else:
+        return False
+    async with _conn.AsyncSessionLocal() as s:
+        # Fake purchase yaratish
+        p = Purchase(
+            telegram_id=telegram_id,
+            product_type=sub_type,
+            amount=0,
+            check_photo='admin_grant',
+            status='confirmed',
+            submitted_at=now,
+            confirmed_at=now,
+        )
+        s.add(p)
+        await s.flush()
+        s.add(Subscription(
+            telegram_id=telegram_id,
+            sub_type=sub_type,
+            started_at=now,
+            expires_at=expires,
+            purchase_id=p.id
+        ))
+        await s.commit()
+    return True
+
+async def admin_revoke_subscription(telegram_id: int) -> bool:
+    """Admin tomonidan obunani bekor qilish."""
+    from database.models import Subscription
+    now = datetime.utcnow()
+    async with _conn.AsyncSessionLocal() as s:
+        await s.execute(
+            update(Subscription)
+            .where(
+                Subscription.telegram_id == telegram_id,
+                Subscription.expires_at > now
+            )
+            .values(expires_at=now)
+        )
+        await s.commit()
+    return True
+
 # ──────────────────────────────────────────────
 # ACCESS — bepul / pullik
 # ──────────────────────────────────────────────
@@ -550,6 +633,21 @@ async def get_full_stats() -> dict:
         avg = avg_r.scalar()
         stats['avg_score'] = round(float(avg), 1) if avg else 0
         return stats
+
+async def delete_questions_by_filter(subject: str = None, category: str = None,
+                                       subcategory: str = None) -> int:
+    """Bo'lim bo'yicha savollarni o'chirish."""
+    async with _conn.AsyncSessionLocal() as s:
+        filters = []
+        if subject:     filters.append(Question.subject == subject)
+        if category:    filters.append(Question.category == category)
+        if subcategory: filters.append(Question.subcategory == subcategory)
+        q = delete(Question)
+        if filters:
+            q = q.where(*filters)
+        result = await s.execute(q)
+        await s.commit()
+        return result.rowcount
 
 async def delete_all_questions() -> int:
     """Barcha savollarni o'chirish, o'chirilgan soni qaytaradi"""
