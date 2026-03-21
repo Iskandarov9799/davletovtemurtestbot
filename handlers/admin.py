@@ -830,9 +830,14 @@ async def section_delete_execute(callback: CallbackQuery):
                                                subcategory_prefix=f"{sub}_")
         d2 = await delete_questions_by_filter(subject=subject, category='sinf', subcategory=sub)
         deleted = d1 + d2
+        # Butun sinfni configdan o'chirish
+        config.ADABIYOT_BOBLAR.pop(sub, None)
     elif category == 'mavzu_all':
         deleted = await delete_questions_by_filter(subject=subject, category='mavzu',
                                                     subcategory_prefix=sub)
+        # Bo'limni configdan o'chirish
+        config.ONA_TILI_BOLIMLAR.pop(sub, None)
+        config.ONA_TILI_SUBMAVZULAR.pop(sub, None)
     elif sub == 'all':
         deleted = await delete_questions_by_filter(
             subject=subject,
@@ -842,9 +847,24 @@ async def section_delete_execute(callback: CallbackQuery):
         deleted = await delete_questions_by_filter(
             subject=subject, category=category, subcategory=sub
         )
+        # Bob o'chirilganda configdan ham olib tashlash
+        if category == 'sinf' and '_' in sub:
+            grade, bob_key = sub.rsplit('_', 1)
+            if grade in config.ADABIYOT_BOBLAR:
+                config.ADABIYOT_BOBLAR[grade].pop(bob_key, None)
+        elif category == 'mavzu':
+            # submavzu o'chirilsa
+            if '_' in sub:
+                bolim, sub_key = sub.split('_', 1)
+                if bolim in config.ONA_TILI_SUBMAVZULAR:
+                    config.ONA_TILI_SUBMAVZULAR[bolim].pop(sub_key, None)
+
+    info = ""
+    if deleted == 0:
+        info = "\n⚠️ Savollar yo'q edi, faqat bo'lim o'chirildi."
 
     await callback.message.edit_text(
-        f"✅ <b>{deleted} ta</b> savol o'chirildi!",
+        f"✅ <b>{deleted} ta</b> savol o'chirildi!{info}",
         parse_mode="HTML"
     )
     await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
