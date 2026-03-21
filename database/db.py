@@ -167,7 +167,7 @@ async def get_access_status(telegram_id: int, access_key: str) -> str:
             ).join(Purchase, Subscription.purchase_id == Purchase.id)
              .where(Purchase.status == 'confirmed')
         )
-        if sub.scalar_one_or_none():
+        if sub.scalars().first():
             return 'paid'
 
         # 3. Bir martalik to'lov (once) — ishlatilmagan bo'lishi kerak
@@ -180,7 +180,7 @@ async def get_access_status(telegram_id: int, access_key: str) -> str:
                 Purchase.is_used == False
             )
         )
-        if once.scalar_one_or_none():
+        if once.scalars().first():
             return 'paid'
 
         return 'buy'
@@ -302,7 +302,7 @@ async def get_active_subscription(telegram_id: int):
              .where(Purchase.status == 'confirmed')
              .order_by(Subscription.expires_at.desc())
         )
-        return sub.scalar_one_or_none()
+        return sub.scalars().first()
 
 
 
