@@ -534,11 +534,8 @@ async def delete_by_section_confirm(callback: CallbackQuery):
         cnt = await count_questions(subject=subject)
 
     await callback.message.edit_text(
-        f"⚠️ <b>Diqqat!</b>
-
-"
-        f"<b>{label}</b> bo'limida <b>{cnt} ta</b> savol bor.
-"
+        f"⚠️ <b>Diqqat!</b>\n\n"
+        f"<b>{label}</b> bo'limida <b>{cnt} ta</b> savol bor.\n"
         f"Barchasini o'chirishni tasdiqlaysizmi?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [
