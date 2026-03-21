@@ -398,9 +398,13 @@ function submitWritten() {
 function skipQuestion() {
   answers[current] = 'skip';
   updateGrid();
-  const next = findNext(current + 1);
-  if (next !== -1) { current = next; renderQuestion(current); }
-  else showResult();
+  // Avval null (hali ishlanmagan) savollarni qidir
+  const nextNull = findNextByStatus(current + 1, null);
+  if (nextNull !== -1) { current = nextNull; renderQuestion(current); return; }
+  // Null qolmasa, skip savollarni qidir
+  const nextSkip = findNextByStatus(current + 1, 'skip');
+  if (nextSkip !== -1) { current = nextSkip; renderQuestion(current); return; }
+  showResult();
 }
 
 function nextQuestion() {
@@ -410,11 +414,22 @@ function nextQuestion() {
 }
 
 function findNext(from) {
+  // null yoki skip bo'lgan savollarni topadi
   for (let i = from; i < questions.length; i++) {
-    if (answers[i] === null) return i;
+    if (answers[i] === null || answers[i] === 'skip') return i;
   }
   for (let i = 0; i < from; i++) {
-    if (answers[i] === null) return i;
+    if (answers[i] === null || answers[i] === 'skip') return i;
+  }
+  return -1;
+}
+
+function findNextByStatus(from, status) {
+  for (let i = from; i < questions.length; i++) {
+    if (answers[i] === status) return i;
+  }
+  for (let i = 0; i < from; i++) {
+    if (answers[i] === status) return i;
   }
   return -1;
 }
@@ -496,12 +511,9 @@ function showResult() {
     });
   }
 
-  if (tg) {
-    tg.MainButton.setText('📤 Natijani yuborish');
-    tg.MainButton.show();
-    tg.MainButton.onClick(sendResult);
-  }
   tg?.HapticFeedback?.notificationOccurred('success');
+  // Natijani avtomatik yuborish
+  setTimeout(() => sendResult(), 500);
 }
 
 function retrySkipped(idx) {
