@@ -540,7 +540,7 @@ function showResult() {
 
   tg?.HapticFeedback?.notificationOccurred('success');
   // ✅ QO'SHILDI: Natijani avtomatik yuborish
-  setTimeout(() => sendResult(), 800);
+  sendResult();
 }
 
 function retrySkipped(idx) {
@@ -600,17 +600,9 @@ function sendResult() {
     correct_ids: correctIds,
   });
 
-  console.log('sendResult chaqirildi, payload:', payload);
   if (tg) {
-    console.log('tg.sendData chaqirilmoqda...');
-    try {
-      tg.sendData(payload);
-      console.log('tg.sendData muvaffaqiyatli!');
-    } catch(e) {
-      console.error('tg.sendData xato:', e);
-    }
+    tg.sendData(payload);
   } else {
-    console.warn('tg mavjud emas');
     alert(`Natija: ${pct}% (${correct}/${total})`);
   }
 }
