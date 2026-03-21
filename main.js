@@ -138,7 +138,10 @@ function updateGrid() {
 }
 
 function jumpTo(i) {
-  if (answers[i] !== null) return;
+  // Faqat javob berilgan (correct/wrong/object) savollarga o'tib bo'lmaydi
+  // null va skip uchun o'tish mumkin
+  if (answers[i] !== null && answers[i] !== 'skip') return;
+  if (answers[i] === 'skip') answers[i] = null; // qayta ishlash uchun reset
   current = i;
   renderQuestion(i);
 }
@@ -398,23 +401,49 @@ function submitWritten() {
 function skipQuestion() {
   answers[current] = 'skip';
   updateGrid();
-  const next = findNext(current + 1);
-  if (next !== -1) { current = next; renderQuestion(current); }
-  else showResult();
+
+  // 1. Avval current+1 dan boshlab null savollarni qidir
+  for (let i = current + 1; i < questions.length; i++) {
+    if (answers[i] === null) { current = i; renderQuestion(i); return; }
+  }
+  // 2. Boshidan null savollarni qidir
+  for (let i = 0; i < current; i++) {
+    if (answers[i] === null) { current = i; renderQuestion(i); return; }
+  }
+  // 3. Null qolmadi — endi skip savollarni qidir (current+1 dan)
+  for (let i = current + 1; i < questions.length; i++) {
+    if (answers[i] === 'skip') { current = i; renderQuestion(i); return; }
+  }
+  // 4. Boshidan skip savollarni qidir
+  for (let i = 0; i < current; i++) {
+    if (answers[i] === 'skip') { current = i; renderQuestion(i); return; }
+  }
+  // 5. Hamma savol tugadi
+  showResult();
 }
 
 function nextQuestion() {
-  const next = findNext(current + 1);
-  if (next !== -1) { current = next; renderQuestion(current); }
-  else showResult();
+  // 1. current+1 dan null savol qidir
+  for (let i = current + 1; i < questions.length; i++) {
+    if (answers[i] === null) { current = i; renderQuestion(i); return; }
+  }
+  // 2. Boshidan null savol qidir
+  for (let i = 0; i <= current; i++) {
+    if (answers[i] === null) { current = i; renderQuestion(i); return; }
+  }
+  // 3. Skip savollar bormi
+  for (let i = 0; i < questions.length; i++) {
+    if (answers[i] === 'skip') { current = i; renderQuestion(i); return; }
+  }
+  showResult();
 }
 
 function findNext(from) {
   for (let i = from; i < questions.length; i++) {
-    if (answers[i] === null) return i;
+    if (answers[i] === null || answers[i] === 'skip') return i;
   }
   for (let i = 0; i < from; i++) {
-    if (answers[i] === null) return i;
+    if (answers[i] === null || answers[i] === 'skip') return i;
   }
   return -1;
 }
@@ -434,12 +463,6 @@ function findNextByStatus(from, status) {
 // ══════════════════════════════════════════════
 
 function showResult() {
-  // Skip va null savollarni xato deb belgilash
-  answers = answers.map((a, i) => {
-    if (a === null || a === 'skip') return 'wrong';
-    return a;
-  });
-
   const total   = questions.length;
   let correct   = 0, wrong = 0, skip = 0, writtenCorrect = 0, writtenWrong = 0;
 
@@ -514,7 +537,7 @@ function showResult() {
 
   tg?.HapticFeedback?.notificationOccurred('success');
   // Natijani avtomatik yuborish
-  setTimeout(() => sendResult(), 800);
+  setTimeout(() => sendResult(), 500);
 }
 
 function retrySkipped(idx) {
