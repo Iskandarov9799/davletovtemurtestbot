@@ -496,76 +496,266 @@ async def delete_questions_cancel(callback: CallbackQuery):
     await callback.answer()
 
 # ══════════════════════════════════════════════
-# BO'LIM BO'YICHA O'CHIRISH
+# BO'LIM BOSHQARISH (O'CHIRISH / QO'SHISH)
 # ══════════════════════════════════════════════
 
 @router.message(F.text == "🗂 Bo'lim o'chirish")
-async def delete_by_section_start(message: Message):
+async def section_manage_start(message: Message):
     if not is_admin(message): return
     await message.answer(
-        "🗂 <b>Qaysi fanni tozalash kerak?</b>",
+        "🗂 <b>Qaysi fan bo'limini boshqarish kerak?</b>",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📚 Ona tili",          callback_data="del_sec:onatili")],
-            [InlineKeyboardButton(text="📖 Adabiyot",          callback_data="del_sec:adabiyot")],
-            [InlineKeyboardButton(text="🎓 Attestatsiya",      callback_data="del_sec:attestation")],
-            [InlineKeyboardButton(text="🏅 Milliy sertifikat", callback_data="del_sec:milliy")],
-            [InlineKeyboardButton(text="🗑 Barchasi",          callback_data="del_sec:all")],
-            [InlineKeyboardButton(text="❌ Bekor",             callback_data="del_sec:cancel")],
+            [InlineKeyboardButton(text="📚 Ona tili",          callback_data="smng:onatili")],
+            [InlineKeyboardButton(text="📖 Adabiyot",          callback_data="smng:adabiyot")],
+            [InlineKeyboardButton(text="🎓 Attestatsiya",      callback_data="smng:attestation")],
+            [InlineKeyboardButton(text="🏅 Milliy sertifikat", callback_data="smng:milliy")],
+            [InlineKeyboardButton(text="❌ Bekor",             callback_data="smng:cancel")],
         ]),
         parse_mode="HTML"
     )
 
-@router.callback_query(F.data.startswith("del_sec:"))
-async def delete_by_section_confirm(callback: CallbackQuery):
+# ── Fan tanlandi ──
+@router.callback_query(F.data.startswith("smng:"))
+async def section_manage_subject(callback: CallbackQuery):
     subject = callback.data.split(":")[1]
     if subject == "cancel":
         await callback.message.edit_text("❌ Bekor qilindi.")
         await callback.answer()
         return
 
-    LABELS = {
-        'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot',
-        'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy sertifikat',
-        'all': '🗑 Barcha savollar'
-    }
-    label = LABELS.get(subject, subject)
+    LABELS = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot',
+              'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy sertifikat'}
 
-    if subject == 'all':
-        cnt = await count_questions()
+    if subject == 'adabiyot':
+        # Sinflarni ko'rsatish
+        btns = []
+        for grade, label in config.GRADES.items():
+            cnt = await count_questions(subject='adabiyot', category='sinf', subcategory=grade)
+            btns.append([InlineKeyboardButton(
+                text=f"{label} ({cnt} savol)",
+                callback_data=f"smng_grade:{grade}"
+            )])
+        # Adabiyot kategoriyalari
+        for cat in ['aralash', 'gazallar', 'sheriy', 'badiiy']:
+            cnt = await count_questions(subject='adabiyot', category=cat)
+            btns.append([InlineKeyboardButton(
+                text=f"📂 {cat.capitalize()} ({cnt} savol)",
+                callback_data=f"smng_cat:adabiyot:{cat}"
+            )])
+        btns.append([InlineKeyboardButton(text="⬅️ Orqaga", callback_data="smng:cancel")])
+        await callback.message.edit_text(
+            f"📖 <b>Adabiyot — bo'limni tanlang:</b>",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=btns),
+            parse_mode="HTML"
+        )
+
+    elif subject == 'onatili':
+        # Ona tili bo'limlari
+        btns = []
+        for key, label in config.ONA_TILI_BOLIMLAR.items():
+            cnt = await count_questions(subject='onatili', category='mavzu', subcategory=key)
+            # Submavzularini ham hisoblash
+            for sub_key in config.ONA_TILI_SUBMAVZULAR.get(key, {}).keys():
+                cnt += await count_questions(subject='onatili', category='mavzu',
+                                              subcategory=f"{key}_{sub_key}")
+            btns.append([InlineKeyboardButton(
+                text=f"{label} ({cnt} savol)",
+                callback_data=f"smng_onatili:{key}"
+            )])
+        for cat in ['aralash']:
+            cnt = await count_questions(subject='onatili', category=cat)
+            btns.append([InlineKeyboardButton(
+                text=f"📂 Aralash ({cnt} savol)",
+                callback_data=f"smng_cat:onatili:aralash"
+            )])
+        btns.append([InlineKeyboardButton(text="⬅️ Orqaga", callback_data="smng:cancel")])
+        await callback.message.edit_text(
+            "📚 <b>Ona tili — bo'limni tanlang:</b>",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=btns),
+            parse_mode="HTML"
+        )
+
     else:
-        cnt = await count_questions(subject=subject)
+        # Attestatsiya / Milliy — to'g'ridan tasdiqlash
+        cnt = await count_questions(subject=subject, is_attestation=True)
+        await callback.message.edit_text(
+            f"⚠️ <b>{LABELS.get(subject)}</b>\n\n"
+            f"<b>{cnt} ta</b> savol bor.\n"
+            f"Barchasini o'chirishni tasdiqlaysizmi?",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"smng_del:{subject}:all:all"),
+                InlineKeyboardButton(text="❌ Yo'q",      callback_data="smng:cancel"),
+            ]]),
+            parse_mode="HTML"
+        )
+    await callback.answer()
+
+# ── Adabiyot sinf tanlandi ──
+@router.callback_query(F.data.startswith("smng_grade:"))
+async def section_manage_grade(callback: CallbackQuery):
+    grade = callback.data.split(":")[1]
+    label = config.GRADES.get(grade, grade)
+    boblar = config.ADABIYOT_BOBLAR.get(grade, {})
+
+    btns = []
+    for bob_key, bob_label in boblar.items():
+        sub = f"{grade}_{bob_key}"
+        cnt = await count_questions(subject='adabiyot', category='sinf', subcategory=sub)
+        btns.append([InlineKeyboardButton(
+            text=f"{bob_label} ({cnt} savol)",
+            callback_data=f"smng_bob:{grade}:{bob_key}"
+        )])
+    # Sinf umumiy (barcha boblar)
+    cnt_all = await count_questions(subject='adabiyot', category='sinf', subcategory=grade)
+    btns.append([InlineKeyboardButton(
+        text=f"🗑 Butun {label}ni o'chirish ({cnt_all} savol)",
+        callback_data=f"smng_del:adabiyot:sinf:{grade}"
+    )])
+    btns.append([InlineKeyboardButton(text="⬅️ Orqaga", callback_data="smng:adabiyot")])
 
     await callback.message.edit_text(
-        f"⚠️ <b>Diqqat!</b>\n\n"
-        f"<b>{label}</b> bo'limida <b>{cnt} ta</b> savol bor.\n"
-        f"Barchasini o'chirishni tasdiqlaysizmi?",
+        f"📖 <b>{label} — bobni tanlang:</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=btns),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+# ── Bob tanlandi ──
+@router.callback_query(F.data.startswith("smng_bob:"))
+async def section_manage_bob(callback: CallbackQuery):
+    _, grade, bob_key = callback.data.split(":")
+    sub   = f"{grade}_{bob_key}"
+    label = f"{config.GRADES.get(grade, grade)} {config.ADABIYOT_BOBLAR.get(grade, {}).get(bob_key, bob_key)}"
+    cnt   = await count_questions(subject='adabiyot', category='sinf', subcategory=sub)
+
+    await callback.message.edit_text(
+        f"📖 <b>{label}</b>\n\n"
+        f"<b>{cnt} ta</b> savol bor.\n\n"
+        f"Nima qilmoqchisiz?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🗑 Ha, o'chirish", callback_data=f"del_sec_ok:{subject}"),
-                InlineKeyboardButton(text="❌ Yo'q",          callback_data="del_sec:cancel"),
-            ]
+            [InlineKeyboardButton(text=f"🗑 O'chirish ({cnt} ta)",
+                                  callback_data=f"smng_del:adabiyot:sinf:{sub}")],
+            [InlineKeyboardButton(text="⬅️ Orqaga", callback_data=f"smng_grade:{grade}")],
         ]),
         parse_mode="HTML"
     )
     await callback.answer()
 
-@router.callback_query(F.data.startswith("del_sec_ok:"))
-async def delete_by_section_execute(callback: CallbackQuery):
-    subject = callback.data.split(":")[1]
-    LABELS = {
-        'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot',
-        'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy sertifikat',
-        'all': '🗑 Barcha savollar'
-    }
-    label = LABELS.get(subject, subject)
+# ── Ona tili bo'lim tanlandi ──
+@router.callback_query(F.data.startswith("smng_onatili:"))
+async def section_manage_onatili(callback: CallbackQuery):
+    bolim = callback.data.split(":")[1]
+    label = config.ONA_TILI_BOLIMLAR.get(bolim, bolim)
+    submavzular = config.ONA_TILI_SUBMAVZULAR.get(bolim, {})
 
-    if subject == 'all':
-        deleted = await delete_all_questions()
-    else:
-        deleted = await delete_questions_by_filter(subject=subject)
+    btns = []
+    if submavzular:
+        for sub_key, sub_label in submavzular.items():
+            sub = f"{bolim}_{sub_key}"
+            cnt = await count_questions(subject='onatili', category='mavzu', subcategory=sub)
+            btns.append([InlineKeyboardButton(
+                text=f"{sub_label} ({cnt} savol)",
+                callback_data=f"smng_sub:{bolim}:{sub_key}"
+            )])
+    # Umumiy bo'lim
+    cnt_all = await count_questions(subject='onatili', category='mavzu', subcategory=bolim)
+    btns.append([InlineKeyboardButton(
+        text=f"🗑 Butun bo'limni o'chirish ({cnt_all} savol)",
+        callback_data=f"smng_del:onatili:mavzu:{bolim}"
+    )])
+    btns.append([InlineKeyboardButton(text="⬅️ Orqaga", callback_data="smng:onatili")])
 
     await callback.message.edit_text(
-        f"✅ <b>{label}</b> — <b>{deleted} ta</b> savol o'chirildi!",
+        f"📚 <b>{label}</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=btns),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+# ── Ona tili submavzu tanlandi ──
+@router.callback_query(F.data.startswith("smng_sub:"))
+async def section_manage_sub(callback: CallbackQuery):
+    _, bolim, sub_key = callback.data.split(":")
+    sub   = f"{bolim}_{sub_key}"
+    label = config.ONA_TILI_SUBMAVZULAR.get(bolim, {}).get(sub_key, sub_key)
+    cnt   = await count_questions(subject='onatili', category='mavzu', subcategory=sub)
+
+    await callback.message.edit_text(
+        f"📚 <b>{label}</b>\n\n"
+        f"<b>{cnt} ta</b> savol bor.\n\n"
+        f"Nima qilmoqchisiz?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"🗑 O'chirish ({cnt} ta)",
+                                  callback_data=f"smng_del:onatili:mavzu:{sub}")],
+            [InlineKeyboardButton(text="⬅️ Orqaga", callback_data=f"smng_onatili:{bolim}")],
+        ]),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+# ── Kategoriya tanlandi (aralash, gazallar va h.k.) ──
+@router.callback_query(F.data.startswith("smng_cat:"))
+async def section_manage_cat(callback: CallbackQuery):
+    _, subject, category = callback.data.split(":")
+    cnt = await count_questions(subject=subject, category=category)
+    SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
+
+    await callback.message.edit_text(
+        f"{SUBJ.get(subject)} — <b>{category.capitalize()}</b>\n\n"
+        f"<b>{cnt} ta</b> savol bor.\n\n"
+        f"Nima qilmoqchisiz?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"🗑 O'chirish ({cnt} ta)",
+                                  callback_data=f"smng_del:{subject}:{category}:all")],
+            [InlineKeyboardButton(text="⬅️ Orqaga", callback_data=f"smng:{subject}")],
+        ]),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+# ── O'chirish tasdiqlash ──
+@router.callback_query(F.data.startswith("smng_del:"))
+async def section_delete_confirm(callback: CallbackQuery):
+    parts    = callback.data.split(":")
+    subject  = parts[1]
+    category = parts[2]
+    sub      = parts[3] if len(parts) > 3 else None
+
+    if sub == 'all':
+        sub = None
+
+    cnt = await count_questions(subject=subject, category=category, subcategory=sub)
+
+    sub_label = f" › {sub}" if sub else ""
+    await callback.message.edit_text(
+        f"⚠️ <b>Tasdiqlang!</b>\n\n"
+        f"<b>{subject}/{category}{sub_label}</b>\n"
+        f"<b>{cnt} ta</b> savol o'chiriladi!",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="🗑 Ha, o'chirish",
+                                 callback_data=f"smng_del_ok:{subject}:{category}:{sub or 'all'}"),
+            InlineKeyboardButton(text="❌ Bekor", callback_data="smng:cancel"),
+        ]]),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+# ── O'chirishni bajarish ──
+@router.callback_query(F.data.startswith("smng_del_ok:"))
+async def section_delete_execute(callback: CallbackQuery):
+    parts    = callback.data.split(":")
+    subject  = parts[1]
+    category = parts[2]
+    sub      = parts[3] if parts[3] != 'all' else None
+
+    deleted = await delete_questions_by_filter(
+        subject=subject,
+        category=category if category != 'all' else None,
+        subcategory=sub
+    )
+
+    await callback.message.edit_text(
+        f"✅ <b>{deleted} ta</b> savol o'chirildi!",
         parse_mode="HTML"
     )
     await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
