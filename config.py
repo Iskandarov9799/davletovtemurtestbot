@@ -28,7 +28,7 @@ class Config:
     PRICE_DAILY:       int = 35_000
     PRICE_MONTHLY:     int = 100_000
     PRICE_RETRY:       int = 3_500   # back-compat
-    PRICE_ATTESTATION: int = 50_000  # Attestatsiya — bir martalik
+    PRICE_ATTESTATION: int = 10_000  # Attestatsiya — bir martalik
     PRICE_MILLIY:      int = 0        # Milliy sertifikat — oddiy to'lov tizimi (bepul + retry)
     MIN_QUESTIONS:     int = 35
     MAX_QUESTIONS:     int = 50
