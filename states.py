@@ -39,6 +39,7 @@ class AdminStates(StatesGroup):
     add_correct       = State()
     broadcast_message = State()
     search_user       = State()
+    add_section       = State()
 
 class EditQuestionStates(StatesGroup):
     browsing       = State()

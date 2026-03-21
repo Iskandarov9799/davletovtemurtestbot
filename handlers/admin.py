@@ -5,7 +5,7 @@ from aiogram.types import Message, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 
 from database.db import (
-    get_all_users, get_full_stats, add_question,
+    get_all_users, get_full_stats, add_question, get_all_questions,
     count_questions, delete_all_questions, delete_questions_by_filter,
     get_user_tariff, admin_grant_subscription, admin_revoke_subscription,
     grant_attestation
@@ -57,37 +57,98 @@ async def admin_users(message: Message):
 @router.message(F.text == "📥 Excel eksport")
 async def admin_export(message: Message):
     if not is_admin(message): return
+    await message.answer("⏳ Fayllar tayyorlanmoqda...")
 
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    # ── 1. Foydalanuvchilar ──────────────────────
     users = await get_all_users()
     wb    = openpyxl.Workbook()
     ws    = wb.active
     ws.title = "Foydalanuvchilar"
 
-    # Sarlavha
-    ws.append(["#", "Telegram ID", "Ism", "Username", "Telefon", "Ro'yxat", "Sana"])
-    for i, u in enumerate(users, 1):
+    hfill = PatternFill("solid", fgColor="1F4E79")
+    hfont = Font(bold=True, color="FFFFFF", size=11)
+    headers = ["#", "Telegram ID", "Ism", "Username", "Telefon", "Tarif", "Ro'yxat", "Sana"]
+    for i, h in enumerate(headers, 1):
+        cell = ws.cell(1, i, h)
+        cell.font  = hfont
+        cell.fill  = hfill
+        cell.alignment = Alignment(horizontal="center")
+
+    TARIFF_LABELS = {"daily": "Kunlik", "monthly": "Oylik", "yearly": "Yillik",
+                     "attestation": "Attestatsiya", "free": "Bepul"}
+    for i, u in enumerate(users, 2):
+        tariff = await get_user_tariff(u.telegram_id)
         ws.append([
-            i,
+            i - 1,
             u.telegram_id,
             u.full_name or "",
-            u.username or "",
+            f"@{u.username}" if u.username else "",
             u.phone_number or "",
+            TARIFF_LABELS.get(tariff["type"], "Bepul"),
             "Ha" if u.is_registered else "Yo'q",
             str(u.registered_at)[:16] if u.registered_at else "",
         ])
 
-    # Ustun kengligini moslashtirish
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or "")) for cell in col)
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+    col_widths = [5, 15, 25, 20, 16, 12, 10, 18]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # ── 2. Savollar ─────────────────────────────
+    questions = await get_all_questions()
+    ws2 = wb.create_sheet("Savollar")
+
+    hfill2 = PatternFill("solid", fgColor="0F4C81")
+    headers2 = ["#", "subject", "category", "subcategory", "is_attestation",
+                "order_num", "question", "a", "b", "c", "d", "correct",
+                "question_type", "written_parts", "keywords_1", "keywords_2"]
+    for i, h in enumerate(headers2, 1):
+        cell = ws2.cell(1, i, h)
+        cell.font  = hfont
+        cell.fill  = hfill2
+        cell.alignment = Alignment(horizontal="center")
+
+    SUBJ_COLORS = {
+        "onatili": "EBF3FB", "adabiyot": "EBF7EE",
+        "attestation": "FFF2CC", "milliy": "E8F5E9"
+    }
+    for i, q in enumerate(questions, 2):
+        color = SUBJ_COLORS.get(q.subject, "FFFFFF")
+        fill  = PatternFill("solid", fgColor=color)
+        row = [
+            i - 1,
+            q.subject, q.category, q.subcategory or "",
+            "TRUE" if q.is_attestation else "FALSE",
+            q.order_num or "",
+            q.question_text,
+            q.option_a or "", q.option_b or "",
+            q.option_c or "", q.option_d or "",
+            q.correct_answer or "",
+            q.question_type or "choice",
+            q.written_parts or 1,
+            q.keywords_1 or "", q.keywords_2 or "",
+        ]
+        for j, val in enumerate(row, 1):
+            cell = ws2.cell(i, j, val)
+            cell.fill = fill
+
+    col_widths2 = [5, 12, 14, 30, 14, 10, 50, 20, 20, 20, 20, 10, 14, 14, 30, 30]
+    for i, w in enumerate(col_widths2, 1):
+        ws2.column_dimensions[get_column_letter(i)].width = w
 
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
 
     await message.answer_document(
-        document=BufferedInputFile(buf.read(), filename="users.xlsx"),
-        caption=f"📥 Jami: <b>{len(users)}</b> ta foydalanuvchi",
+        document=BufferedInputFile(buf.read(), filename="eksport.xlsx"),
+        caption=(
+            f"📥 <b>Eksport tayyor!</b>\n\n"
+            f"👥 Foydalanuvchilar: <b>{len(users)} ta</b>\n"
+            f"📝 Savollar: <b>{len(questions)} ta</b>"
+        ),
         parse_mode="HTML"
     )
 
@@ -760,6 +821,120 @@ async def section_delete_execute(callback: CallbackQuery):
     )
     await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
     await callback.answer()
+
+# ══════════════════════════════════════════════
+# BO'LIM QO'SHISH
+# ══════════════════════════════════════════════
+
+@router.message(F.text == "➕ Bo'lim qo'shish")
+async def add_section_start(message: Message):
+    if not is_admin(message): return
+    await message.answer(
+        "➕ <b>Qaysi fanga bo'lim qo'shmoqchisiz?</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📖 Adabiyot — yangi bob",   callback_data="addsec:adabiyot")],
+            [InlineKeyboardButton(text="📚 Ona tili — yangi mavzu", callback_data="addsec:onatili")],
+            [InlineKeyboardButton(text="❌ Bekor",                  callback_data="addsec:cancel")],
+        ]),
+        parse_mode="HTML"
+    )
+
+@router.callback_query(F.data.startswith("addsec:"))
+async def add_section_choose(callback: CallbackQuery, state: FSMContext):
+    subject = callback.data.split(":")[1]
+    if subject == "cancel":
+        await callback.message.edit_text("❌ Bekor qilindi.")
+        await callback.answer()
+        return
+
+    if subject == "adabiyot":
+        # Sinf tanlash
+        btns = [[InlineKeyboardButton(text=label, callback_data=f"addsec_grade:{grade}")]
+                for grade, label in config.GRADES.items()]
+        btns.append([InlineKeyboardButton(text="❌ Bekor", callback_data="addsec:cancel")])
+        await callback.message.edit_text(
+            "📖 <b>Qaysi sinfga bob qo'shmoqchisiz?</b>",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=btns),
+            parse_mode="HTML"
+        )
+    elif subject == "onatili":
+        await callback.message.edit_text(
+            "📚 <b>Yangi mavzu nomini yozing:</b>\n\n"
+            "Format: <code>kalit_nomi|Ko'rinish nomi</code>\n"
+            "Masalan: <code>leksikologiya_yangi|Yangi leksikologiya bo'limi</code>",
+            parse_mode="HTML"
+        )
+        await state.update_data(addsec_subject="onatili")
+        await state.set_state(AdminStates.add_section)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("addsec_grade:"))
+async def add_section_grade(callback: CallbackQuery, state: FSMContext):
+    grade = callback.data.split(":")[1]
+    label = config.GRADES.get(grade, grade)
+    existing = config.ADABIYOT_BOBLAR.get(grade, {})
+    next_bob = str(len(existing) + 1)
+
+    await callback.message.edit_text(
+        f"📖 <b>{label}</b>\n\n"
+        f"Mavjud boblar: <b>{len(existing)} ta</b>\n"
+        f"Yangi bob raqami: <b>{next_bob}</b>\n\n"
+        f"Bob nomini yozing (masalan: <code>5-bob</code>):",
+        parse_mode="HTML"
+    )
+    await state.update_data(addsec_subject="adabiyot", addsec_grade=grade, addsec_bob_num=next_bob)
+    await state.set_state(AdminStates.add_section)
+    await callback.answer()
+
+@router.message(AdminStates.add_section)
+async def add_section_save(message: Message, state: FSMContext):
+    data    = await state.get_data()
+    subject = data.get("addsec_subject")
+    await state.clear()
+
+    if subject == "adabiyot":
+        grade   = data.get("addsec_grade")
+        bob_num = data.get("addsec_bob_num")
+        bob_name = message.text.strip()
+
+        # config ga qo'shish (runtime)
+        if grade not in config.ADABIYOT_BOBLAR:
+            config.ADABIYOT_BOBLAR[grade] = {}
+        config.ADABIYOT_BOBLAR[grade][bob_num] = bob_name
+
+        await message.answer(
+            f"✅ <b>Qo'shildi!</b>\n\n"
+            f"📖 {config.GRADES.get(grade)} — <b>{bob_name}</b>\n\n"
+            f"⚠️ Bu o'zgarish bot qayta ishga tushguncha saqlanadi.\n"
+            f"Doimiy saqlash uchun <code>config.py</code> ga qo'shing:\n"
+            f"<code>\'{grade}\': {{...\'{bob_num}\': \'{bob_name}\'...}}</code>",
+            reply_markup=admin_keyboard(),
+            parse_mode="HTML"
+        )
+
+    elif subject == "onatili":
+        text = message.text.strip()
+        if "|" not in text:
+            await message.answer(
+                "❌ Format noto'g'ri!\n"
+                "To'g'ri format: <code>kalit_nomi|Ko'rinish nomi</code>",
+                parse_mode="HTML"
+            )
+            return
+        key, label = text.split("|", 1)
+        key   = key.strip()
+        label = label.strip()
+        config.ONA_TILI_BOLIMLAR[key] = label
+
+        await message.answer(
+            f"✅ <b>Qo'shildi!</b>\n\n"
+            f"📚 Kalit: <code>{key}</code>\n"
+            f"Ko'rinish: <b>{label}</b>\n\n"
+            f"⚠️ Doimiy saqlash uchun <code>config.py</code> ga qo'shing:\n"
+            f"<code>ONA_TILI_BOLIMLAR[\'{key}\'] = \'{label}\'</code>",
+            reply_markup=admin_keyboard(),
+            parse_mode="HTML"
+        )
 
 # ══════════════════════════════════════════════
 # A'ZOLAR KO'RISH VA TARIF BOSHQARISH

@@ -523,6 +523,14 @@ async def delete_question(qid: int):
         await s.execute(delete(Question).where(Question.id == qid))
         await s.commit()
 
+async def get_all_questions() -> list:
+    """Bazadagi barcha savollarni qaytaradi."""
+    async with _conn.AsyncSessionLocal() as s:
+        r = await s.execute(
+            select(Question).order_by(Question.subject, Question.category, Question.subcategory, Question.order_num, Question.id)
+        )
+        return r.scalars().all()
+
 async def get_questions_page(subject=None, category=None, offset=0, limit=5):
     async with _conn.AsyncSessionLocal() as s:
         filters = []

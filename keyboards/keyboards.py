@@ -43,8 +43,9 @@ def admin_keyboard():
             [KeyboardButton(text="👥 A'zolar"),            KeyboardButton(text="📢 Broadcast")],
             [KeyboardButton(text="➕ Savol qo'shish"),     KeyboardButton(text="📋 Savollar")],
             [KeyboardButton(text="📥 Excel eksport"),      KeyboardButton(text="📤 Excel import")],
-            [KeyboardButton(text="🗂 Bo'lim o'chirish"),   KeyboardButton(text="🗑 Savollarni o'chirish")],
-            [KeyboardButton(text="🔗 Yechim linki"),       KeyboardButton(text="🔙 Orqaga")],
+            [KeyboardButton(text="🗂 Bo'lim o'chirish"),   KeyboardButton(text="➕ Bo'lim qo'shish")],
+            [KeyboardButton(text="🗑 Savollarni o'chirish"),   KeyboardButton(text="🔗 Yechim linki")],
+            [KeyboardButton(text="🔙 Orqaga")],
         ],
         resize_keyboard=True
     )
