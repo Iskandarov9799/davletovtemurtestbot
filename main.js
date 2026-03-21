@@ -600,8 +600,41 @@ function sendResult() {
     correct_ids: correctIds,
   });
 
-  if (tg) {
-    tg.sendData(payload);
+  // user_id ni initData dan olish
+  let userId = null;
+  try {
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      userId = tg.initDataUnsafe.user.id;
+    }
+  } catch(e) {}
+
+  const fullPayload = JSON.parse(payload);
+  if (userId) fullPayload.user_id = userId;
+
+  // tg.sendData mavjud bo'lsa — ishlatamiz
+  if (tg && tg.sendData && userId) {
+    try {
+      tg.sendData(JSON.stringify(fullPayload));
+      return;
+    } catch(e) {
+      console.warn('sendData ishlamadi, fetch uriniladi:', e);
+    }
+  }
+
+  // Aks holda — /result endpoint ga yuboramiz
+  if (userId) {
+    const botUrl = 'http://170.168.6.220:8080/result';
+    fetch(botUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullPayload)
+    }).then(r => r.json()).then(d => {
+      console.log('Natija yuborildi:', d);
+      if (tg) tg.close();
+    }).catch(e => {
+      console.error('fetch xato:', e);
+      alert(`Natija: ${pct}% (${correct}/${total})`);
+    });
   } else {
     alert(`Natija: ${pct}% (${correct}/${total})`);
   }
