@@ -600,9 +600,17 @@ function sendResult() {
     correct_ids: correctIds,
   });
 
+  console.log('sendResult chaqirildi, payload:', payload);
   if (tg) {
-    tg.sendData(payload);
+    console.log('tg.sendData chaqirilmoqda...');
+    try {
+      tg.sendData(payload);
+      console.log('tg.sendData muvaffaqiyatli!');
+    } catch(e) {
+      console.error('tg.sendData xato:', e);
+    }
   } else {
+    console.warn('tg mavjud emas');
     alert(`Natija: ${pct}% (${correct}/${total})`);
   }
 }
