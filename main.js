@@ -562,3 +562,4 @@ window.submitWritten = submitWritten;
 window.retrySkipped  = retrySkipped;
 
 loadQuestionsFromHash();
+
