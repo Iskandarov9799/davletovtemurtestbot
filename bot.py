@@ -4,38 +4,38 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-
 from config import config
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    level  = logging.INFO,
+    format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+
 async def main():
-    # 1. .env ni tekshirish
     config.validate()
 
-    # 2. Engine va DB ni ishga tushirish
     from database.connection import init_engine, init_db
     init_engine()
     await init_db()
 
-    # 3. Keep-alive (Render uchun)
-    from keep_alive import start_web_server
-    await start_web_server()
+    # Keep-alive (Render uchun, agar ishlatilsa)
+    # from keep_alive import start_web_server
+    # await start_web_server()
 
-    # 4. Bot va Dispatcher
     bot = Bot(
-        token=config.BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        token   = config.BOT_TOKEN,
+        default = DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
     dp = Dispatcher(storage=MemoryStorage())
 
-    # 5. Routerlar
+    # ── Routerlar ────────────────────────────────
     from handlers import registration, payment, test_handler, admin, question_editor
+    from handlers import web_app_handler   # ← YANGI: tg.sendData handler
+
     dp.include_router(admin.router)
+    dp.include_router(web_app_handler.router)  # ← ENG MUHIM: birinchilardan bo'lishi kerak
     dp.include_router(registration.router)
     dp.include_router(payment.router)
     dp.include_router(test_handler.router)
@@ -50,6 +50,7 @@ async def main():
     finally:
         await bot.session.close()
         logger.info("🛑 Bot to'xtatildi.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
