@@ -27,10 +27,10 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
 
     from handlers import registration, payment, test_handler, admin, question_editor
-    from handlers import miniapp_handler   # web_app_data handler shu yerda
+    from handlers import miniapp_handler
 
     dp.include_router(admin.router)
-    dp.include_router(miniapp_handler.router)  # ← web_app_data shu yerda
+    dp.include_router(miniapp_handler.router)
     dp.include_router(registration.router)
     dp.include_router(payment.router)
     dp.include_router(test_handler.router)
@@ -39,7 +39,16 @@ async def main():
     logger.info("🚀 Bot ishga tushdi! Admin IDs: %s", config.ADMIN_IDS)
 
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(
+            bot,
+            allowed_updates=[
+                "message",
+                "callback_query",
+                "web_app_data",
+                "inline_query",
+                "chosen_inline_result",
+            ]
+        )
     except KeyboardInterrupt:
         pass
     finally:
