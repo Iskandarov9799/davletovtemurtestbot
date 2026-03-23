@@ -10,9 +10,12 @@ from aiogram.types import (
 from aiogram.fsm.context import FSMContext
 
 from database.db import (
-    is_user_paid, is_user_registered,
-    save_test_result, get_random_questions,
-    mark_wrong_question, mark_correct_question,
+    is_registered,
+    get_access_status,
+    get_questions,
+    save_test_result,
+    mark_wrong_question,
+    mark_correct_question,
 )
 from keyboards.keyboards import main_menu_keyboard
 from config import config
@@ -56,10 +59,12 @@ def difficulty_keyboard():
 
 @router.message(F.text == "📝 Testni boshlash")
 async def open_miniapp(message: Message, state: FSMContext):
-    if not is_user_registered(message.from_user.id):
+    uid = message.from_user.id
+    if not await is_registered(uid):
         await message.answer("❌ Avval ro'yxatdan o'ting! /start")
         return
-    if not is_user_paid(message.from_user.id):
+    status = await get_access_status(uid, access_key="onatili_test")
+    if status == 'buy':
         await message.answer(
             "❌ Test uchun to'lov qilishingiz kerak!\n💳 /pay buyrug'ini yuboring.",
             reply_markup=main_menu_keyboard(is_paid=False),
@@ -75,7 +80,13 @@ async def open_miniapp(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith("mapp_diff:"))
 async def send_questions_to_miniapp(callback: CallbackQuery, state: FSMContext):
     difficulty = callback.data.split(":")[1]
-    questions  = get_random_questions(subject="ona_tili", count=30, difficulty=difficulty)
+    questions = await get_questions(
+        subject='onatili',
+        category=difficulty if difficulty != 'mixed' else 'aralash',
+        difficulty=difficulty if difficulty != 'mixed' else None,
+        count=30,
+        telegram_id=callback.from_user.id,
+    )
 
     if not questions:
         await callback.answer("❌ Bu darajada savollar yo'q!", show_alert=True)
