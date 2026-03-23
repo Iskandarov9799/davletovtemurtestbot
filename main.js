@@ -1,7 +1,6 @@
 // ════════════════════════════════════════════════
 // TELEGRAM WEB APP
 // GitHub Pages → tg.sendData() → Bot → DB
-// Fetch/HTTP/HTTPS shart emas!
 // ════════════════════════════════════════════════
 const tg = window.Telegram?.WebApp;
 if (tg) {
@@ -19,8 +18,8 @@ let meta       = {};
 let resultSent = false;
 
 const DEMO = [
-  { id:1, t:"Fe'lning necha zamonlari bor?",       a:"2 ta", b:"3 ta", c:"4 ta", d:"5 ta",       ok:"B", type:"choice" },
-  { id:2, t:"Qaysi so'z olmosh turkumiga kiradi?",  a:"kitob", b:"men", c:"yaxshi", d:"yugurmoq", ok:"B", type:"choice" },
+  { id:1, t:"Fe'lning necha zamonlari bor?",      a:"2 ta", b:"3 ta", c:"4 ta", d:"5 ta",       ok:"B", type:"choice" },
+  { id:2, t:"Qaysi so'z olmosh turkumiga kiradi?", a:"kitob", b:"men", c:"yaxshi", d:"yugurmoq", ok:"B", type:"choice" },
 ];
 
 // ══════════════════════════════════════════════
@@ -32,7 +31,6 @@ async function loadQuestionsFromHash() {
   const hash   = params.get('data') || window.location.hash.slice(1);
 
   if (!hash) {
-    console.warn('Data yo\'q — demo rejim');
     questions = DEMO;
     meta      = { subject:'onatili', category:'demo', is_attestation:false };
     initTest();
@@ -60,7 +58,7 @@ async function loadQuestionsFromHash() {
       }
       const total = chunks.reduce((s, c) => s + c.length, 0);
       const out   = new Uint8Array(total);
-      let   off   = 0;
+      let off = 0;
       for (const c of chunks) { out.set(c, off); off += c.length; }
       jsonText = new TextDecoder('utf-8').decode(out);
     } else {
@@ -91,7 +89,8 @@ function showLoader(on) {
 // ══════════════════════════════════════════════
 function initTest() {
   if (!questions.length) {
-    document.getElementById('qtxt').textContent = '❌ Savollar topilmadi!';
+    const el = document.getElementById('question-text') || document.getElementById('qtxt');
+    if (el) el.textContent = '❌ Savollar topilmadi!';
     showLoader(false);
     return;
   }
@@ -101,13 +100,14 @@ function initTest() {
   resultSent = false;
 
   const SUBJ = { onatili:'📚 Ona tili', adabiyot:'📖 Adabiyot' };
-  document.getElementById('hdr-title').textContent = SUBJ[meta.subject] || '📚 Test';
-  const subEl = document.getElementById('hdr-sub');
+  const titleEl = document.getElementById('header-title') || document.getElementById('hdr-title');
+  if (titleEl) titleEl.textContent = SUBJ[meta.subject] || '📚 Test';
+  const subEl = document.getElementById('header-sub') || document.getElementById('hdr-sub');
   if (subEl) subEl.textContent = meta.category || '';
 
   if (tg) {
-    tg.setHeaderColor?.('#0f1523');
-    tg.setBackgroundColor?.('#0f1523');
+    tg.setHeaderColor?.('#0a0e1a');
+    tg.setBackgroundColor?.('#0a0e1a');
   }
 
   buildGrid();
@@ -117,14 +117,15 @@ function initTest() {
 }
 
 // ══════════════════════════════════════════════
-// GRID
+// GRID — style.css: .grid-btn, .current, .g-correct, .g-wrong, .g-skip
 // ══════════════════════════════════════════════
 function buildGrid() {
   const g = document.getElementById('grid');
+  if (!g) return;
   g.innerHTML = '';
   questions.forEach((q, i) => {
     const btn       = document.createElement('button');
-    btn.className   = 'gbtn' + (i === 0 ? ' cur' : '');
+    btn.className   = 'grid-btn' + (i === 0 ? ' current' : '');
     btn.id          = 'gb-' + i;
     btn.textContent = i + 1;
     if (isWritten(q)) btn.classList.add('written');
@@ -137,14 +138,14 @@ function updateGrid() {
   questions.forEach((q, i) => {
     const btn = document.getElementById('gb-' + i);
     if (!btn) return;
-    btn.className = 'gbtn' + (isWritten(q) ? ' written' : '');
-    if      (i === current)            btn.classList.add('cur');
-    else if (answers[i] === 'correct') btn.classList.add('ok');
-    else if (answers[i] === 'wrong')   btn.classList.add('err');
-    else if (answers[i] === 'skip')    btn.classList.add('skp');
+    btn.className = 'grid-btn' + (isWritten(q) ? ' written' : '');
+    if      (i === current)            btn.classList.add('current');
+    else if (answers[i] === 'correct') btn.classList.add('g-correct');
+    else if (answers[i] === 'wrong')   btn.classList.add('g-wrong');
+    else if (answers[i] === 'skip')    btn.classList.add('g-skip');
     else if (answers[i] && typeof answers[i] === 'object') {
       const allOk = answers[i].ok1 && (questions[i]?.written_parts < 2 || answers[i].ok2);
-      btn.classList.add(allOk ? 'ok' : 'err');
+      btn.classList.add(allOk ? 'g-correct' : 'g-wrong');
     }
   });
 }
@@ -167,36 +168,56 @@ function renderQuestion(i) {
   const q     = questions[i];
   const total = questions.length;
 
+  // Progress
   const pct = Math.round((i + 1) / total * 100);
-  document.getElementById('prg-fill').style.width  = pct + '%';
-  document.getElementById('prg-label').textContent = `${i + 1} / ${total}`;
-  const pctEl = document.getElementById('prg-pct');
+  const fillEl = document.getElementById('progress-fill') || document.getElementById('prg-fill');
+  if (fillEl) fillEl.style.width = pct + '%';
+  const numEl = document.getElementById('progress-num') || document.getElementById('prg-label');
+  if (numEl) numEl.textContent = `${i + 1} / ${total}`;
+  const pctEl = document.getElementById('progress-pct') || document.getElementById('prg-pct');
   if (pctEl) pctEl.textContent = pct + '%';
-  document.getElementById('hdr-score').textContent = score + ' ball';
-  document.getElementById('qnum').textContent      = `SAVOL ${i + 1}`;
-  document.getElementById('qtxt').textContent      = q.t || q.question_text || '';
 
-  const imgEl  = document.getElementById('qimg');
-  const imgSrc = q.img || '';
-  imgEl.style.display = imgSrc ? 'block' : 'none';
-  if (imgSrc) imgEl.src = imgSrc;
+  // Score
+  const scoreEl = document.getElementById('score-badge') || document.getElementById('hdr-score');
+  if (scoreEl) scoreEl.textContent = score + ' ball';
 
-  const fb = document.getElementById('fb');
-  fb.className     = 'fb';
-  fb.style.display = 'none';
-  fb.innerHTML     = '';
+  // Savol
+  const badgeEl = document.getElementById('question-badge') || document.getElementById('qnum');
+  if (badgeEl) badgeEl.textContent = `SAVOL ${i + 1}`;
+  const textEl = document.getElementById('question-text') || document.getElementById('qtxt');
+  if (textEl) textEl.textContent = q.t || q.question_text || '';
 
-  document.getElementById('btn-skip').style.display   = 'inline-flex';
-  document.getElementById('btn-next').style.display   = 'none';
-  document.getElementById('btn-finish').style.display = 'none';
+  // Rasm
+  const imgEl  = document.getElementById('question-img') || document.getElementById('qimg');
+  if (imgEl) {
+    const imgSrc = q.img || '';
+    imgEl.style.display = imgSrc ? 'block' : 'none';
+    if (imgSrc) imgEl.src = imgSrc;
+  }
+
+  // Feedback reset
+  const fb = document.getElementById('feedback') || document.getElementById('fb');
+  if (fb) { fb.className = 'feedback'; fb.style.display = 'none'; fb.innerHTML = ''; }
+
+  // Tugmalar
+  const btnSkip   = document.getElementById('btn-skip');
+  const btnNext   = document.getElementById('btn-next');
+  const btnFinish = document.getElementById('btn-finish');
+  if (btnSkip)   btnSkip.style.display   = 'inline-flex';
+  if (btnNext)   btnNext.style.display   = 'none';
+  if (btnFinish) btnFinish.style.display = 'none';
 
   isWritten(q) ? renderWrittenQuestion(q) : renderChoiceQuestion(q);
   updateGrid();
 }
 
+// ══════════════════════════════════════════════
+// VARIANTLAR — style.css: .option, .option-letter, .option-text
+// ══════════════════════════════════════════════
 function renderChoiceQuestion(q) {
-  const opts = document.getElementById('opts');
-  opts.innerHTML     = '';
+  const opts = document.getElementById('options') || document.getElementById('opts');
+  if (!opts) return;
+  opts.innerHTML    = '';
   opts.style.display = 'flex';
 
   const wc = document.getElementById('written-container');
@@ -207,24 +228,26 @@ function renderChoiceQuestion(q) {
   LBLS.forEach((lbl, idx) => {
     if (!TEXTS[idx]) return;
     const div     = document.createElement('div');
-    div.className = 'opt';
+    div.className = 'option';
     div.id        = 'opt-' + lbl;
-    div.innerHTML = `<span class="opt-ltr">${lbl}</span><span class="opt-txt">${TEXTS[idx]}</span>`;
+    div.innerHTML = `<span class="option-letter">${lbl}</span><span class="option-text">${TEXTS[idx]}</span>`;
     div.onclick   = () => selectOption(lbl);
     opts.appendChild(div);
   });
 }
 
 function renderWrittenQuestion(q) {
-  const opts = document.getElementById('opts');
-  opts.innerHTML     = '';
-  opts.style.display = 'none';
+  const opts = document.getElementById('options') || document.getElementById('opts');
+  if (opts) { opts.innerHTML = ''; opts.style.display = 'none'; }
 
   let wc = document.getElementById('written-container');
   if (!wc) {
     wc    = document.createElement('div');
     wc.id = 'written-container';
-    opts.parentNode.insertBefore(wc, opts.nextSibling);
+    // question-card ichiga qo'shamiz
+    const card = document.querySelector('.question-card') || document.querySelector('.qcard');
+    if (card) card.appendChild(wc);
+    else if (opts) opts.parentNode.insertBefore(wc, opts.nextSibling);
   }
   wc.style.display = 'block';
 
@@ -245,6 +268,7 @@ function renderWrittenQuestion(q) {
 
 // ══════════════════════════════════════════════
 // VARIANT TANLASH
+// style.css: .option.correct, .option.wrong, .option.show-correct, .option.disabled
 // ══════════════════════════════════════════════
 function selectOption(label) {
   if (answered) return;
@@ -254,29 +278,37 @@ function selectOption(label) {
   const correct = q.ok || q.correct_answer || '';
   const isOk    = label === correct;
 
-  document.querySelectorAll('.opt').forEach(o => { o.classList.add('off'); o.onclick = null; });
+  document.querySelectorAll('.option').forEach(o => {
+    o.classList.add('disabled');
+    o.onclick = null;
+  });
+
   document.getElementById('opt-' + label)?.classList.add(isOk ? 'correct' : 'wrong');
-  if (!isOk) document.getElementById('opt-' + correct)?.classList.add('hint');
+  if (!isOk) document.getElementById('opt-' + correct)?.classList.add('show-correct');
 
   answers[current] = isOk ? 'correct' : 'wrong';
   if (isOk) score++;
-  document.getElementById('hdr-score').textContent = score + ' ball';
+  const scoreEl = document.getElementById('score-badge') || document.getElementById('hdr-score');
+  if (scoreEl) scoreEl.textContent = score + ' ball';
 
   const TEXTS    = { A: q.a, B: q.b, C: q.c, D: q.d };
-  const fb       = document.getElementById('fb');
+  const fb       = document.getElementById('feedback') || document.getElementById('fb');
   const solUrl   = meta.solution_url || '';
   const qid      = q.id || '';
   const linkHtml = solUrl
     ? `<br><a href="${solUrl}" target="_blank" style="color:inherit;font-size:12px;text-decoration:underline;">📹 Yechimni ko'rish (ID: ${qid})</a>`
     : (qid ? `<br><span style="font-size:11px;opacity:0.5;">ID: ${qid}</span>` : '');
 
-  fb.style.display = 'flex';
-  fb.className     = isOk ? 'fb ok' : 'fb err';
-  fb.innerHTML     = isOk
-    ? `✅ To'g'ri javob!${linkHtml}`
-    : `❌ Noto'g'ri! To'g'ri: <b>${correct}) ${TEXTS[correct]||''}</b>${linkHtml}`;
+  if (fb) {
+    fb.style.display = 'flex';
+    fb.className     = isOk ? 'feedback correct-fb' : 'feedback wrong-fb';
+    fb.innerHTML     = isOk
+      ? `✅ To'g'ri javob!${linkHtml}`
+      : `❌ Noto'g'ri! To'g'ri: <b>${correct}) ${TEXTS[correct]||''}</b>${linkHtml}`;
+  }
 
-  document.getElementById('btn-skip').style.display = 'none';
+  const btnSkip = document.getElementById('btn-skip');
+  if (btnSkip) btnSkip.style.display = 'none';
   checkAllDone();
   updateGrid();
   tg?.HapticFeedback?.impactOccurred(isOk ? 'medium' : 'heavy');
@@ -285,10 +317,14 @@ function selectOption(label) {
 function checkAllDone() {
   const noUnanswered = answers.every(a => a !== null);
   const noSkipped    = !answers.some(a => a === 'skip');
+  const btnNext   = document.getElementById('btn-next');
+  const btnFinish = document.getElementById('btn-finish');
   if (noUnanswered && noSkipped) {
-    document.getElementById('btn-finish').style.display = 'inline-flex';
+    if (btnNext)   btnNext.style.display   = 'none';
+    if (btnFinish) btnFinish.style.display = 'inline-flex';
   } else {
-    document.getElementById('btn-next').style.display = 'inline-flex';
+    if (btnNext)   btnNext.style.display   = 'inline-flex';
+    if (btnFinish) btnFinish.style.display = 'none';
   }
 }
 
@@ -319,7 +355,8 @@ function submitWritten() {
   let ans2 = '';
   const ans2El = document.getElementById('written-ans-2');
   if (ans2El) { ans2 = ans2El.value.trim(); ans2El.disabled = true; }
-  document.querySelector('.written-submit-btn')?.style && (document.querySelector('.written-submit-btn').style.display = 'none');
+  const submitBtn = document.querySelector('.written-submit-btn');
+  if (submitBtn) submitBtn.style.display = 'none';
 
   const kw1   = q.kw1 || q.keywords_1 || '';
   const kw2   = q.kw2 || q.keywords_2 || '';
@@ -329,22 +366,26 @@ function submitWritten() {
 
   answers[current] = { w1: ans1, w2: ans2, ok1, ok2 };
   if (allOk) score++;
-  document.getElementById('hdr-score').textContent = score + ' ball';
+  const scoreEl = document.getElementById('score-badge') || document.getElementById('hdr-score');
+  if (scoreEl) scoreEl.textContent = score + ' ball';
 
-  const fb = document.getElementById('fb');
-  fb.style.display = 'flex';
-  if (parts === 1) {
-    const hint   = (!ok1 && kw1) ? `<br>💡 Kalit so'z: <b>${kw1.split(',')[0].trim()}</b>` : '';
-    fb.className = ok1 ? 'fb ok' : 'fb err';
-    fb.innerHTML = ok1 ? `✅ <b>To'g'ri!</b>` : `❌ <b>Noto'g'ri.</b>${hint}`;
-  } else {
-    const hint1  = (!ok1 && kw1) ? ` (kalit: <b>${kw1.split(',')[0].trim()}</b>)` : '';
-    const hint2  = (!ok2 && kw2) ? ` (kalit: <b>${kw2.split(',')[0].trim()}</b>)` : '';
-    fb.className = allOk ? 'fb ok' : 'fb err';
-    fb.innerHTML = `${ok1?'✅':'❌'} 1-qism${hint1}<br>${ok2?'✅':'❌'} 2-qism${hint2}`;
+  const fb = document.getElementById('feedback') || document.getElementById('fb');
+  if (fb) {
+    fb.style.display = 'flex';
+    if (parts === 1) {
+      const hint   = (!ok1 && kw1) ? `<br>💡 Kalit so'z: <b>${kw1.split(',')[0].trim()}</b>` : '';
+      fb.className = ok1 ? 'feedback correct-fb' : 'feedback wrong-fb';
+      fb.innerHTML = ok1 ? `✅ <b>To'g'ri!</b>` : `❌ <b>Noto'g'ri.</b>${hint}`;
+    } else {
+      const hint1  = (!ok1 && kw1) ? ` (kalit: <b>${kw1.split(',')[0].trim()}</b>)` : '';
+      const hint2  = (!ok2 && kw2) ? ` (kalit: <b>${kw2.split(',')[0].trim()}</b>)` : '';
+      fb.className = allOk ? 'feedback correct-fb' : 'feedback wrong-fb';
+      fb.innerHTML = `${ok1?'✅':'❌'} 1-qism${hint1}<br>${ok2?'✅':'❌'} 2-qism${hint2}`;
+    }
   }
 
-  document.getElementById('btn-skip').style.display = 'none';
+  const btnSkip = document.getElementById('btn-skip');
+  if (btnSkip) btnSkip.style.display = 'none';
   checkAllDone();
   updateGrid();
   tg?.HapticFeedback?.notificationOccurred(allOk ? 'success' : 'error');
@@ -372,15 +413,16 @@ function nextQuestion() {
 
 // ══════════════════════════════════════════════
 // NATIJA
+// style.css: .result-score, .stat-val, .result-grid-box, .grid-btn
 // ══════════════════════════════════════════════
 function showResult() {
   const total = questions.length;
   let correct = 0, wrong = 0, skip = 0;
 
   answers.forEach((a, i) => {
-    if      (a === 'correct')              correct++;
-    else if (a === 'wrong')               wrong++;
-    else if (a === 'skip' || a === null)  { skip++; wrong++; }
+    if      (a === 'correct')             correct++;
+    else if (a === 'wrong')              wrong++;
+    else if (a === 'skip' || a === null) { skip++; wrong++; }
     else if (typeof a === 'object' && a) {
       const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
       allOk ? correct++ : wrong++;
@@ -399,30 +441,44 @@ function showResult() {
     [0,  '😔', 'Qoniqarsiz (2)'],
   ].find(([min]) => pct >= min);
 
-  document.getElementById('r-emoji').textContent   = emoji;
-  document.getElementById('r-grade').textContent   = grade;
-  document.getElementById('r-score').textContent   = pct + '%';
-  document.getElementById('r-correct').textContent = correct;
-  document.getElementById('r-wrong').textContent   = wrongOnly;
-  document.getElementById('r-skip').textContent    = skip;
+  // style.css elementlari
+  const emojiEl = document.getElementById('result-emoji') || document.getElementById('r-emoji');
+  const gradeEl = document.getElementById('result-grade') || document.getElementById('r-grade');
+  const scoreEl = document.getElementById('result-score') || document.getElementById('r-score');
+  const corrEl  = document.getElementById('stat-correct') || document.getElementById('r-correct');
+  const wrongEl = document.getElementById('stat-wrong')   || document.getElementById('r-wrong');
+  const skipEl  = document.getElementById('stat-skip')    || document.getElementById('r-skip');
 
+  if (emojiEl) emojiEl.textContent = emoji;
+  if (gradeEl) gradeEl.textContent = grade;
+  if (scoreEl) scoreEl.textContent = pct + '%';
+  if (corrEl)  corrEl.textContent  = correct;
+  if (wrongEl) wrongEl.textContent = wrongOnly;
+  if (skipEl)  skipEl.textContent  = skip;
+
+  // Result grid — style.css: .grid-btn, .g-correct, .g-wrong, .g-skip
   const rg = document.getElementById('result-grid');
-  rg.innerHTML = '';
-  answers.forEach((a, i) => {
-    const d = document.createElement('div');
-    if      (a === 'correct')             d.className = 'gbtn ok';
-    else if (a === 'wrong')              d.className = 'gbtn err';
-    else if (a === 'skip' || a === null) {
-      d.className = 'gbtn skp'; d.onclick = () => retrySkipped(i);
-      d.style.cursor = 'pointer'; d.title = 'Bosing — qaytib ishlash';
-    } else if (typeof a === 'object') {
-      const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
-      d.className = 'gbtn written ' + (allOk ? 'ok' : 'err');
-    }
-    d.textContent = i + 1;
-    rg.appendChild(d);
-  });
+  if (rg) {
+    rg.innerHTML = '';
+    answers.forEach((a, i) => {
+      const d = document.createElement('div');
+      if      (a === 'correct')             d.className = 'grid-btn g-correct';
+      else if (a === 'wrong')              d.className = 'grid-btn g-wrong';
+      else if (a === 'skip' || a === null) {
+        d.className    = 'grid-btn g-skip';
+        d.onclick      = () => retrySkipped(i);
+        d.style.cursor = 'pointer';
+        d.title        = 'Bosing — qaytib ishlash';
+      } else if (typeof a === 'object') {
+        const allOk = a.ok1 && (questions[i]?.written_parts < 2 || a.ok2);
+        d.className = 'grid-btn written ' + (allOk ? 'g-correct' : 'g-wrong');
+      }
+      d.textContent = i + 1;
+      rg.appendChild(d);
+    });
+  }
 
+  // To'g'ri javoblar ro'yxati
   const answerList = document.getElementById('answer-list');
   if (answerList) {
     answerList.innerHTML = '';
@@ -456,11 +512,9 @@ function retrySkipped(idx) {
   renderQuestion(idx);
 }
 
-// ══════════════════════════════════════════════════════════
-// NATIJANI BOTGA YUBORISH — faqat tg.sendData()
-// Hech qanday HTTP/fetch yo'q — Telegram o'z kanali ishlatadi
-// Bot on_web_app_data bilan qabul qiladi va DB ga saqlaydi
-// ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════
+// NATIJANI BOTGA YUBORISH — tg.sendData()
+// ══════════════════════════════════════════════
 function sendResult({ correct, wrong, skip, total, pct }) {
   const wrongIds   = [];
   const correctIds = [];
@@ -476,11 +530,7 @@ function sendResult({ correct, wrong, skip, total, pct }) {
   });
 
   const payload = {
-    correct,
-    wrong,
-    skip,
-    total,
-    score:          pct,
+    correct, wrong, skip, total, score: pct,
     subject:        meta.subject        || 'onatili',
     category:       meta.category       || 'aralash',
     subcategory:    meta.subcategory    || null,
@@ -495,7 +545,6 @@ function sendResult({ correct, wrong, skip, total, pct }) {
   if (tg && typeof tg.sendData === 'function') {
     try {
       tg.sendData(JSON.stringify(payload));
-      // 2.5 soniyadan keyin yopiladi — natijani ko'rsin
       setTimeout(() => tg.close(), 2500);
     } catch (e) {
       console.error('sendData xato:', e);
