@@ -20,22 +20,17 @@ async def main():
     init_engine()
     await init_db()
 
-    # Keep-alive (Render uchun, agar ishlatilsa)
-    # from keep_alive import start_web_server
-    # await start_web_server()
-
     bot = Bot(
         token   = config.BOT_TOKEN,
         default = DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
     dp = Dispatcher(storage=MemoryStorage())
 
-    # ── Routerlar ────────────────────────────────
     from handlers import registration, payment, test_handler, admin, question_editor
-    from handlers import web_app_handler   # ← YANGI: tg.sendData handler
+    from handlers import miniapp_handler   # web_app_data handler shu yerda
 
     dp.include_router(admin.router)
-    dp.include_router(web_app_handler.router)  # ← ENG MUHIM: birinchilardan bo'lishi kerak
+    dp.include_router(miniapp_handler.router)  # ← web_app_data shu yerda
     dp.include_router(registration.router)
     dp.include_router(payment.router)
     dp.include_router(test_handler.router)
