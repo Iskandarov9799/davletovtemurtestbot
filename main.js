@@ -547,11 +547,11 @@ function sendResult({ correct, wrong, skip, total, pct }) {
   if (tg && typeof tg.sendData === 'function') {
     try {
       tg.sendData(JSON.stringify(payload));
-      setTimeout(() => tg.close(), 2500);
-      alert('yuborildi!'); // ← shu qator
+      setTimeout(() => tg.close(), 300000);
+
     } catch (e) {
       console.error('sendData xato:', e);
-      alert('XATO: ' + e.message); // ← va shu
+
     }
   } else {
     console.warn('tg.sendData yo\'q — demo rejimi');
