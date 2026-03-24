@@ -517,7 +517,7 @@ function retrySkipped(idx) {
 // NATIJANI BOTGA YUBORISH — tg.sendData()
 // ══════════════════════════════════════════════
 function sendResult({ correct, wrong, skip, total, pct }) {
-  alert('tg: ' + (tg ? 'bor' : 'YOQ') + ' | sendData: ' + (typeof tg?.sendData));
+
   const wrongIds   = [];
   const correctIds = [];
   answers.forEach((a, i) => {
@@ -548,8 +548,10 @@ function sendResult({ correct, wrong, skip, total, pct }) {
     try {
       tg.sendData(JSON.stringify(payload));
       setTimeout(() => tg.close(), 2500);
+      alert('yuborildi!'); // ← shu qator
     } catch (e) {
       console.error('sendData xato:', e);
+      alert('XATO: ' + e.message); // ← va shu
     }
   } else {
     console.warn('tg.sendData yo\'q — demo rejimi');
