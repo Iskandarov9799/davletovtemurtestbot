@@ -416,6 +416,7 @@ function nextQuestion() {
 // style.css: .result-score, .stat-val, .result-grid-box, .grid-btn
 // ══════════════════════════════════════════════
 function showResult() {
+  alert('showResult chaqirildi!'); // vaqtinchalik
   const total = questions.length;
   let correct = 0, wrong = 0, skip = 0;
 
@@ -516,6 +517,7 @@ function retrySkipped(idx) {
 // NATIJANI BOTGA YUBORISH — tg.sendData()
 // ══════════════════════════════════════════════
 function sendResult({ correct, wrong, skip, total, pct }) {
+  alert('sendResult: ' + pct + '%'); // vaqtinchalik
   const wrongIds   = [];
   const correctIds = [];
   answers.forEach((a, i) => {
@@ -562,4 +564,3 @@ window.submitWritten = submitWritten;
 window.retrySkipped  = retrySkipped;
 
 loadQuestionsFromHash();
-
