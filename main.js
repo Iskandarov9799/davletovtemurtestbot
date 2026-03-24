@@ -547,15 +547,18 @@ function sendResult({ correct, wrong, skip, total, pct }) {
   if (tg && typeof tg.sendData === 'function') {
     try {
       tg.sendData(JSON.stringify(payload));
-      setTimeout(() => tg.close(), 300000);
-
+      // tg.close() chaqirilmaydi — foydalanuvchi javoblarni ko'rishi mumkin
+      // Yopish uchun "Yopish" tugmasi bor
     } catch (e) {
       console.error('sendData xato:', e);
-
     }
   } else {
     console.warn('tg.sendData yo\'q — demo rejimi');
   }
+}
+
+function closeApp() {
+  if (tg) tg.close();
 }
 
 // ══════════════════════════════════════════════
@@ -564,5 +567,6 @@ window.nextQuestion  = nextQuestion;
 window.showResult    = showResult;
 window.submitWritten = submitWritten;
 window.retrySkipped  = retrySkipped;
+window.closeApp      = closeApp;
 
 loadQuestionsFromHash();
