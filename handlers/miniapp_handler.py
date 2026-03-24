@@ -68,6 +68,7 @@ async def open_miniapp(message: Message, state: FSMContext):
         await message.answer(
             "❌ Test uchun to'lov qilishingiz kerak!\n💳 /pay buyrug'ini yuboring.",
             reply_markup=main_menu_keyboard(),
+        )
         return
     await message.answer(
         "🎯 <b>Qiyinlik darajasini tanlang:</b>",
@@ -188,10 +189,8 @@ async def receive_miniapp_data(message: Message, bot: Bot):
             await bot.send_message(
                 chat_id    = group_id,
                 text       = (
-                    f"{emoji} <b>{uname}</b>
-"
-                    f"📌 {subj_label}{cat_label}
-"
+                    f"{emoji} <b>{uname}</b>\n"
+                    f"📌 {subj_label}{cat_label}\n"
                     f"✅ {correct}/{total} | 📈 {pct:.0f}% | 🎓 {grade}"
                 ),
                 parse_mode = "HTML",
