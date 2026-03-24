@@ -67,8 +67,7 @@ async def open_miniapp(message: Message, state: FSMContext):
     if status == 'buy':
         await message.answer(
             "❌ Test uchun to'lov qilishingiz kerak!\n💳 /pay buyrug'ini yuboring.",
-            reply_markup=main_menu_keyboard(is_paid=False),
-        )
+            reply_markup=main_menu_keyboard(),
         return
     await message.answer(
         "🎯 <b>Qiyinlik darajasini tanlang:</b>",
@@ -166,6 +165,43 @@ async def receive_miniapp_data(message: Message, bot: Bot):
 
     logger.info(f"Natija: {correct}/{total} ({pct}%) | user={user_id}")
 
+    # ── Baho ────────────────────────────────────
+    if   pct >= 90: grade, emoji = "A'lo (5)",      "🏆"
+    elif pct >= 70: grade, emoji = "Yaxshi (4)",     "🎉"
+    elif pct >= 50: grade, emoji = "Qoniqarli (3)",  "📚"
+    else:           grade, emoji = "Qoniqarsiz (2)", "😔"
+
+    encouragement = "🌟 Ajoyib! Shunday davom eting!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
+
+    # ── Guruhga yuborish (DB dan oldin — crash bo'lsa ham yuborilsin) ──
+    if config.RESULT_GROUP_ID:
+        SUBJ = {
+            'onatili':     '📚 Ona tili',
+            'adabiyot':    '📖 Adabiyot',
+            'attestation': '🎓 Attestatsiya',
+            'milliy':      '🏅 Milliy sertifikat',
+        }
+        subj_label = SUBJ.get(subject, subject)
+        cat_label  = f" › {subcategory}" if subcategory else (f" › {category}" if category else "")
+        try:
+            group_id = int(config.RESULT_GROUP_ID)
+            await bot.send_message(
+                chat_id    = group_id,
+                text       = (
+                    f"{emoji} <b>{uname}</b>
+"
+                    f"📌 {subj_label}{cat_label}
+"
+                    f"✅ {correct}/{total} | 📈 {pct:.0f}% | 🎓 {grade}"
+                ),
+                parse_mode = "HTML",
+            )
+            logger.info(f"✅ Guruhga yuborildi: {group_id}")
+        except Exception as e:
+            logger.error(f"❌ Guruhga yuborishda xato: {e!r}")
+    else:
+        logger.warning("⚠️ RESULT_GROUP_ID .env da yo'q — guruhga yuborilmadi")
+
     # ── DB ga saqlash ────────────────────────────
     try:
         await save_test_result(
@@ -181,7 +217,7 @@ async def receive_miniapp_data(message: Message, bot: Bot):
         )
         logger.info(f"✅ DB ga saqlandi: user={user_id}")
     except Exception as e:
-        logger.error(f"❌ save_test_result xato: {e}")
+        logger.error(f"❌ save_test_result xato: {e!r}")
 
     for qid in wrong_ids:
         try:
@@ -195,14 +231,6 @@ async def receive_miniapp_data(message: Message, bot: Bot):
         except Exception as e:
             logger.warning(f"mark_correct xato qid={qid}: {e}")
 
-    # ── Baho ────────────────────────────────────
-    if   pct >= 90: grade, emoji = "A'lo (5)",      "🏆"
-    elif pct >= 70: grade, emoji = "Yaxshi (4)",     "🎉"
-    elif pct >= 50: grade, emoji = "Qoniqarli (3)",  "📚"
-    else:           grade, emoji = "Qoniqarsiz (2)", "😔"
-
-    encouragement = "🌟 Ajoyib! Shunday davom eting!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
-
     # ── Foydalanuvchiga natija ───────────────────
     try:
         await message.answer(
@@ -215,27 +243,8 @@ async def receive_miniapp_data(message: Message, bot: Bot):
             f"🎓 Baho:        <b>{grade}</b>\n"
             f"━━━━━━━━━━━━━\n\n"
             f"{encouragement}",
-            reply_markup=main_menu_keyboard(is_paid=True),
+            reply_markup=main_menu_keyboard(),
             parse_mode="HTML",
         )
     except Exception as e:
-        logger.error(f"answer xato: {e}")
-
-    # ── Guruhga yuborish ─────────────────────────
-    if config.RESULT_GROUP_ID:
-        SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
-        subj_label = SUBJ.get(subject, subject)
-        try:
-            await bot.send_message(
-                chat_id    = int(config.RESULT_GROUP_ID),
-                text       = (
-                    f"{emoji} <b>{uname}</b> — {subj_label}\n"
-                    f"✅ {correct}/{total} | 📈 {pct:.0f}% | 🎓 {grade}"
-                ),
-                parse_mode = "HTML",
-            )
-            logger.info(f"✅ Guruhga yuborildi: {config.RESULT_GROUP_ID}")
-        except Exception as e:
-            logger.error(f"❌ Guruhga yuborishda xato: {e}")
-    else:
-        logger.warning("⚠️ RESULT_GROUP_ID .env da yo'q — guruhga yuborilmadi")
+        logger.error(f"answer xato: {e!r}")

@@ -44,7 +44,6 @@ async def main():
             allowed_updates=[
                 "message",
                 "callback_query",
-                "web_app_data",
                 "inline_query",
                 "chosen_inline_result",
             ]
