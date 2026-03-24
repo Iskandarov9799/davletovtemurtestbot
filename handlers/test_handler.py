@@ -142,18 +142,19 @@ async def upload_to_cloudinary(file_id: str, bot, config) -> str:
 async def safe_edit(callback, text, reply_markup=None):
     """
     Inline keyboard uchun edit_text ishlatadi.
-    ReplyKeyboardMarkup kelsa — edit (inline olib tashlab) + answer (reply keyboard bilan).
+    ReplyKeyboardMarkup kelsa — mavjud xabarni edit qilib (inline olib tashlaydi),
+    keyin faqat ReplyKeyboard yuboradi (matn takrorlanmaydi).
     """
     from aiogram.types import ReplyKeyboardMarkup
     try:
         if isinstance(reply_markup, ReplyKeyboardMarkup):
-            # edit_text ReplyKeyboard qabul qilmaydi — avval inline ni o'chiramiz
+            # edit_text ReplyKeyboard qabul qilmaydi — avval inline ni o'chirib, matnni yangilaymiz
             try:
                 await callback.message.edit_text(text, reply_markup=None, parse_mode="HTML")
             except Exception:
                 pass
-            # Keyin reply keyboard bilan yangi xabar
-            await callback.message.answer(text, reply_markup=reply_markup, parse_mode="HTML")
+            # Faqat keyboard yuborish — matn takrorlanmasin
+            await callback.message.answer("👇", reply_markup=reply_markup)
         else:
             await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
     except Exception as e:
@@ -213,7 +214,19 @@ async def send_miniapp(callback, subject, category,
     encoded = encode_questions(q_list, meta)
     url = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
 
-    sub_label = f" › {subcategory}" if subcategory else ''
+    # FIX 1: subcategory "10_1" → "10-sinf › 1-bob" chiroyli nomga aylantiriladi
+    if subcategory:
+        parts_sub = subcategory.split('_', 1)
+        if len(parts_sub) == 2:
+            grade_key, bob_key = parts_sub
+            grade_name = config.GRADES.get(grade_key, grade_key)
+            bob_name = config.ADABIYOT_BOBLAR.get(grade_key, {}).get(bob_key, f"{bob_key}-bob")
+            sub_label = f" › {grade_name} › {bob_name}"
+        else:
+            sub_label = f" › {config.GRADES.get(subcategory, subcategory)}"
+    else:
+        sub_label = ''
+
     await safe_edit(callback,
         f"{SUBJ.get(subject)}<b>{sub_label}</b>\n\n"
         f"📊 Savollar: <b>{len(questions)} ta</b>\n"

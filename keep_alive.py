@@ -66,7 +66,10 @@ async def receive_result(request):
         elif pct >= 50: grade, emoji = "Qoniqarli (3)",  "📚"
         else:           grade, emoji = "Qoniqarsiz (2)", "😔"
 
-        bot = Bot(token=config.BOT_TOKEN)
+        # Global singleton — har safar yangi Bot yaratmaslik uchun (connection leak oldini olish)
+        if not hasattr(receive_result, '_bot') or receive_result._bot is None:
+            receive_result._bot = Bot(token=config.BOT_TOKEN)
+        bot = receive_result._bot
         try:
             from keyboards.keyboards import main_menu_keyboard
             await bot.send_message(
@@ -96,8 +99,8 @@ async def receive_result(request):
                     text=f"{emoji} <b>{uname}</b> — {subj_label}\n✅ {correct}/{total}  |  📈 {pct}%  |  🎓 {grade}",
                     parse_mode="HTML"
                 )
-        finally:
-            await bot.session.close()
+        except Exception:
+            pass
 
         return web.json_response({'ok': True})
 

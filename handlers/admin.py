@@ -514,8 +514,7 @@ async def addq_correct(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "addq:cancel")
 async def addq_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Bekor qilindi.")
-    await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
+    await callback.message.edit_text("❌ Bekor qilindi.", reply_markup=admin_keyboard())
     await callback.answer()
 
 # ══════════════════════════════════════════════
@@ -546,9 +545,9 @@ async def delete_questions_execute(callback: CallbackQuery):
     deleted = await delete_all_questions()
     await callback.message.edit_text(
         f"🗑 <b>{deleted} ta savol o'chirildi!</b>",
+        reply_markup=admin_keyboard(),
         parse_mode="HTML"
     )
-    await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
     await callback.answer()
 
 @router.callback_query(F.data == "admin:cancel_delete")
@@ -865,9 +864,9 @@ async def section_delete_execute(callback: CallbackQuery):
 
     await callback.message.edit_text(
         f"✅ <b>{deleted} ta</b> savol o'chirildi!{info}",
+        reply_markup=admin_keyboard(),
         parse_mode="HTML"
     )
-    await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
     await callback.answer()
 
 # ══════════════════════════════════════════════

@@ -183,8 +183,7 @@ async def check_not_photo(message: Message):
 @router.callback_query(F.data == "payment:cancel")
 async def payment_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Bekor qilindi.")
-    await callback.message.answer("Bosh menyu:", reply_markup=main_menu_keyboard())
+    await callback.message.edit_text("❌ Bekor qilindi.", reply_markup=main_menu_keyboard())
     await callback.answer()
 
 # ── ADMIN: TASDIQLASH / RAD ETISH ────────────────
