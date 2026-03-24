@@ -140,8 +140,22 @@ async def upload_to_cloudinary(file_id: str, bot, config) -> str:
     return url
 
 async def safe_edit(callback, text, reply_markup=None):
+    """
+    Inline keyboard uchun edit_text ishlatadi.
+    ReplyKeyboardMarkup kelsa — edit (inline olib tashlab) + answer (reply keyboard bilan).
+    """
+    from aiogram.types import ReplyKeyboardMarkup
     try:
-        await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+        if isinstance(reply_markup, ReplyKeyboardMarkup):
+            # edit_text ReplyKeyboard qabul qilmaydi — avval inline ni o'chiramiz
+            try:
+                await callback.message.edit_text(text, reply_markup=None, parse_mode="HTML")
+            except Exception:
+                pass
+            # Keyin reply keyboard bilan yangi xabar
+            await callback.message.answer(text, reply_markup=reply_markup, parse_mode="HTML")
+        else:
+            await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
     except Exception as e:
         if "message is not modified" not in str(e):
             pass

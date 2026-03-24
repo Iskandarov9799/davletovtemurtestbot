@@ -203,9 +203,13 @@ def payment_confirm_keyboard(purchase_id: int):
     ]])
 
 def miniapp_keyboard(url: str):
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="🚀 Testni boshlash", web_app=WebAppInfo(url=url))
-    ]])
+    return ReplyKeyboardMarkup(
+        keyboard=[[
+            KeyboardButton(text="🚀 Testni boshlash", web_app=WebAppInfo(url=url))
+        ]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
 
 # ══════════════════════════════════════════════
 # ADMIN — savol qo'shish
