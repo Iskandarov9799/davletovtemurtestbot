@@ -46,6 +46,7 @@ async def main():
                 "callback_query",
                 "inline_query",
                 "chosen_inline_result",
+                "web_app_data",   # MUHIM: Mini App natijalarini qabul qilish uchun
             ]
         )
     except KeyboardInterrupt:

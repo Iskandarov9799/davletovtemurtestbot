@@ -67,11 +67,13 @@ async def _auto_migrate(engine):
 
         # 1. Yangi ustunlar qo'shish
         new_columns = [
-            ("purchases",  "is_used",       "BOOLEAN DEFAULT FALSE"),
-        ("questions", "question_type", "VARCHAR(20) DEFAULT 'choice'"),
-            ("questions", "written_parts", "INTEGER DEFAULT 1"),
-            ("questions", "keywords_1",    "TEXT"),
-            ("questions", "keywords_2",    "TEXT"),
+            ("purchases",  "is_used",        "BOOLEAN DEFAULT FALSE"),
+            ("questions",  "question_type",  "VARCHAR(20) DEFAULT 'choice'"),
+            ("questions",  "written_parts",  "INTEGER DEFAULT 1"),
+            ("questions",  "keywords_1",     "TEXT"),
+            ("questions",  "keywords_2",     "TEXT"),
+            # subcategory ustuni VARCHAR(50) bo'lishi kerak - bolim_N saqlash uchun yetarli
+            # (bazada allaqachon bor, faqat NULL constraint tekshirish)
         ]
         for table, col, col_type in new_columns:
             exists = await conn.scalar(
@@ -83,7 +85,18 @@ async def _auto_migrate(engine):
                 await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                 print(f"✅ Migration: {table}.{col} qo'shildi")
 
-        # 2. user_wrong_questions jadvali (agar yo'q bo'lsa create_all qo'shadi, lekin ustunlarni tekshiramiz)
+        # 2. questions.subcategory VARCHAR uzunligini tekshirish (bolim_10 uchun kerak)
+        subcat_len = await conn.scalar(
+            text("SELECT character_maximum_length FROM information_schema.columns "
+                 "WHERE table_name = 'questions' AND column_name = 'subcategory'")
+        )
+        if subcat_len and subcat_len < 50:
+            await conn.execute(text(
+                "ALTER TABLE questions ALTER COLUMN subcategory TYPE VARCHAR(100)"
+            ))
+            print("✅ Migration: questions.subcategory VARCHAR(100) ga kengaytirildi")
+
+        # 3. user_wrong_questions jadvali (agar yo'q bo'lsa create_all qo'shadi, lekin ustunlarni tekshiramiz)
         wrong_exists = await conn.scalar(
             text("SELECT COUNT(*) FROM information_schema.tables "
                  "WHERE table_name = 'user_wrong_questions'")
@@ -101,7 +114,7 @@ async def _auto_migrate(engine):
             """))
             print("✅ Migration: user_wrong_questions jadvali yaratildi")
 
-        # 3. Yozma savollar uchun option_a/b/c/d NOT NULL olib tashlash
+        # 4. Yozma savollar uchun option_a/b/c/d NOT NULL olib tashlash
         nullable_cols = ["option_a", "option_b", "option_c", "option_d", "correct_answer"]
         for col in nullable_cols:
             is_nullable = await conn.scalar(

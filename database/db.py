@@ -1,15 +1,20 @@
 """
 Barcha database operatsiyalari — async SQLAlchemy orqali.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, update, delete, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload  # noqa: F401 - boshqa fayllar import qilishi mumkin
 
 from database.models import (
     User, Purchase, UserAccess, AttestationAccess,
-    Question, TestResult, UserWrongQuestion
+    Subscription, Question, TestResult, UserWrongQuestion
 )
 import database.connection as _conn
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
 
 # ──────────────────────────────────────────────
 # USERS
@@ -20,6 +25,7 @@ async def get_user(telegram_id: int):
         r = await s.execute(select(User).where(User.telegram_id == telegram_id))
         return r.scalar_one_or_none()
 
+
 async def create_user(telegram_id: int, full_name: str, username: str = None):
     async with _conn.AsyncSessionLocal() as s:
         existing = await s.execute(select(User).where(User.telegram_id == telegram_id))
@@ -29,9 +35,10 @@ async def create_user(telegram_id: int, full_name: str, username: str = None):
             telegram_id=telegram_id,
             full_name=full_name,
             username=username,
-            registered_at=datetime.utcnow()
+            registered_at=_now()
         ))
         await s.commit()
+
 
 async def update_user_phone(telegram_id: int, phone: str):
     async with _conn.AsyncSessionLocal() as s:
@@ -42,21 +49,22 @@ async def update_user_phone(telegram_id: int, phone: str):
         )
         await s.commit()
 
+
 async def is_registered(telegram_id: int) -> bool:
     user = await get_user(telegram_id)
     return bool(user and user.is_registered)
+
 
 async def get_all_users():
     async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(select(User).order_by(User.registered_at.desc()))
         return r.scalars().all()
 
+
 async def get_user_tariff(telegram_id: int) -> dict:
     """Foydalanuvchi tarifini qaytaradi."""
-    from database.models import Subscription
-    now = datetime.utcnow()
+    now = _now()
     async with _conn.AsyncSessionLocal() as s:
-        # Faol obuna
         sub = await s.execute(
             select(Subscription).where(
                 Subscription.telegram_id == telegram_id,
@@ -73,31 +81,23 @@ async def get_user_tariff(telegram_id: int) -> dict:
                 'label': LABELS.get(sub.sub_type, sub.sub_type),
                 'expires': str(sub.expires_at)[:16]
             }
-        # Attestatsiya
         att = await s.execute(
-            select(AttestationAccess).where(
-                AttestationAccess.telegram_id == telegram_id
-            )
+            select(AttestationAccess).where(AttestationAccess.telegram_id == telegram_id)
         )
         if att.scalars().first():
             return {'type': 'attestation', 'label': 'Attestatsiya', 'expires': None}
         return {'type': 'free', 'label': 'Bepul', 'expires': None}
 
+
 async def admin_grant_subscription(telegram_id: int, sub_type: str) -> bool:
     """Admin tomonidan obuna berish (to'lovsiz)."""
     from datetime import timedelta
-    from database.models import Subscription
-    now = datetime.utcnow()
-    if sub_type == 'daily':
-        expires = now + timedelta(days=1)
-    elif sub_type == 'monthly':
-        expires = now + timedelta(days=30)
-    elif sub_type == 'yearly':
-        expires = now + timedelta(days=365)
-    else:
+    now = _now()
+    DAYS = {'daily': 1, 'monthly': 30, 'yearly': 365}
+    if sub_type not in DAYS:
         return False
+    expires = now + timedelta(days=DAYS[sub_type])
     async with _conn.AsyncSessionLocal() as s:
-        # Fake purchase yaratish
         p = Purchase(
             telegram_id=telegram_id,
             product_type=sub_type,
@@ -119,10 +119,10 @@ async def admin_grant_subscription(telegram_id: int, sub_type: str) -> bool:
         await s.commit()
     return True
 
+
 async def admin_revoke_subscription(telegram_id: int) -> bool:
     """Admin tomonidan obunani bekor qilish."""
-    from database.models import Subscription
-    now = datetime.utcnow()
+    now = _now()
     async with _conn.AsyncSessionLocal() as s:
         await s.execute(
             update(Subscription)
@@ -135,6 +135,7 @@ async def admin_revoke_subscription(telegram_id: int) -> bool:
         await s.commit()
     return True
 
+
 # ──────────────────────────────────────────────
 # ACCESS — bepul / pullik
 # ──────────────────────────────────────────────
@@ -146,7 +147,6 @@ async def get_access_status(telegram_id: int, access_key: str) -> str:
     'buy'   — to'lov kerak
     """
     async with _conn.AsyncSessionLocal() as s:
-        # 1. Bepul urinish ishlatilganmi?
         ua = await s.execute(
             select(UserAccess).where(
                 UserAccess.telegram_id == telegram_id,
@@ -157,9 +157,7 @@ async def get_access_status(telegram_id: int, access_key: str) -> str:
         if ua is None or not ua.free_used:
             return 'free'
 
-        # 2. Faol obuna bormi? (daily / monthly)
-        from database.models import Subscription
-        now = datetime.utcnow()
+        now = _now()
         sub = await s.execute(
             select(Subscription).where(
                 Subscription.telegram_id == telegram_id,
@@ -170,7 +168,6 @@ async def get_access_status(telegram_id: int, access_key: str) -> str:
         if sub.scalars().first():
             return 'paid'
 
-        # 3. Bir martalik to'lov (once) — ishlatilmagan bo'lishi kerak
         once = await s.execute(
             select(Purchase).where(
                 Purchase.telegram_id == telegram_id,
@@ -185,8 +182,8 @@ async def get_access_status(telegram_id: int, access_key: str) -> str:
 
         return 'buy'
 
+
 async def mark_once_used(telegram_id: int, access_key: str):
-    """Once to'lovni ishlatilgan deb belgilash"""
     async with _conn.AsyncSessionLocal() as s:
         await s.execute(
             update(Purchase)
@@ -200,6 +197,7 @@ async def mark_once_used(telegram_id: int, access_key: str):
             .values(is_used=True)
         )
         await s.commit()
+
 
 async def mark_free_used(telegram_id: int, access_key: str):
     async with _conn.AsyncSessionLocal() as s:
@@ -220,6 +218,7 @@ async def mark_free_used(telegram_id: int, access_key: str):
             ))
         await s.commit()
 
+
 # ──────────────────────────────────────────────
 # ATTESTATION
 # ──────────────────────────────────────────────
@@ -234,6 +233,7 @@ async def has_attestation(telegram_id: int, subject: str) -> bool:
         )
         return r.scalar_one_or_none() is not None
 
+
 async def get_attestation_format(telegram_id: int, subject: str):
     async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(
@@ -244,6 +244,7 @@ async def get_attestation_format(telegram_id: int, subject: str):
         )
         row = r.scalar_one_or_none()
         return row.format if row else None
+
 
 async def grant_attestation(telegram_id: int, subject: str, fmt: str):
     async with _conn.AsyncSessionLocal() as s:
@@ -258,26 +259,23 @@ async def grant_attestation(telegram_id: int, subject: str, fmt: str):
                 telegram_id=telegram_id,
                 subject=subject,
                 format=fmt,
-                purchased_at=datetime.utcnow()
+                purchased_at=_now()
             ))
             await s.commit()
 
+
 # ──────────────────────────────────────────────
-# PURCHASES
+# SUBSCRIPTIONS & PURCHASES
 # ──────────────────────────────────────────────
-# ── SUBSCRIPTION ──────────────────────────────────────
 
 async def grant_subscription(telegram_id: int, sub_type: str, purchase_id: int):
     """Kunlik yoki oylik obuna berish"""
     from datetime import timedelta
-    from database.models import Subscription
-    now = datetime.utcnow()
-    if sub_type == 'daily':
-        expires = now + timedelta(days=1)
-    elif sub_type == 'monthly':
-        expires = now + timedelta(days=30)
-    else:
+    now = _now()
+    DAYS = {'daily': 1, 'monthly': 30}
+    if sub_type not in DAYS:
         return
+    expires = now + timedelta(days=DAYS[sub_type])
     async with _conn.AsyncSessionLocal() as s:
         s.add(Subscription(
             telegram_id=telegram_id,
@@ -290,9 +288,7 @@ async def grant_subscription(telegram_id: int, sub_type: str, purchase_id: int):
 
 
 async def get_active_subscription(telegram_id: int):
-    """Faol obunani qaytarish yoki None"""
-    from database.models import Subscription
-    now = datetime.utcnow()
+    now = _now()
     async with _conn.AsyncSessionLocal() as s:
         sub = await s.execute(
             select(Subscription).where(
@@ -305,48 +301,42 @@ async def get_active_subscription(telegram_id: int):
         return sub.scalars().first()
 
 
-
 async def create_purchase(telegram_id: int, product_type: str, amount: int,
                            check_photo: str, retry_key: str = None) -> int:
-    """
-    product_type: 'retry' | 'attestation_onatili' | 'attestation_adabiyot'
-    retry_key:    access_key (faqat retry uchun)
-    """
     async with _conn.AsyncSessionLocal() as s:
         p = Purchase(
             telegram_id=telegram_id,
-            product_type=product_type,  # ← har doim 'retry' yoki 'attestation_X'
+            product_type=product_type,
             retry_key=retry_key,
             amount=amount,
             check_photo=check_photo,
-            submitted_at=datetime.utcnow()
+            submitted_at=_now()
         )
         s.add(p)
         await s.commit()
         await s.refresh(p)
         return p.id
 
+
 async def confirm_purchase(purchase_id: int, admin_id: int):
     async with _conn.AsyncSessionLocal() as s:
         await s.execute(
             update(Purchase)
             .where(Purchase.id == purchase_id)
-            .values(status='confirmed',
-                    confirmed_at=datetime.utcnow(),
-                    confirmed_by=admin_id)
+            .values(status='confirmed', confirmed_at=_now(), confirmed_by=admin_id)
         )
         await s.commit()
+
 
 async def reject_purchase(purchase_id: int, admin_id: int):
     async with _conn.AsyncSessionLocal() as s:
         await s.execute(
             update(Purchase)
             .where(Purchase.id == purchase_id)
-            .values(status='rejected',
-                    confirmed_at=datetime.utcnow(),
-                    confirmed_by=admin_id)
+            .values(status='rejected', confirmed_at=_now(), confirmed_by=admin_id)
         )
         await s.commit()
+
 
 async def get_pending_purchases():
     async with _conn.AsyncSessionLocal() as s:
@@ -358,10 +348,12 @@ async def get_pending_purchases():
         )
         return r.all()
 
+
 async def get_purchase_by_id(purchase_id: int):
     async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(select(Purchase).where(Purchase.id == purchase_id))
         return r.scalar_one_or_none()
+
 
 # ──────────────────────────────────────────────
 # QUESTIONS
@@ -372,16 +364,23 @@ async def get_questions(subject: str, category: str,
                          count: int = 35, is_attestation: bool = False,
                          telegram_id: int = None) -> list:
     """
-    Savollarni qaytaradi:
-    - Attestation: tartib bo'yicha (order_num)
-    - Oddiy: avval foydalanuvchi xato qilgan savollar, keyin random yangilar
+    Attestation: tartib bo'yicha (order_num), subcategory (bolim_N) bilan filtrlanadi.
+    Oddiy: avval xato qilinganlar, keyin random yangilar.
     """
     async with _conn.AsyncSessionLocal() as s:
         if is_attestation:
-            q = select(Question).where(
+            filters_att = [
                 Question.subject == subject,
-                Question.is_attestation == True
-            ).order_by(Question.order_num)
+                Question.is_attestation == True,
+            ]
+            if subcategory:
+                filters_att.append(Question.subcategory == subcategory)
+            q = (
+                select(Question)
+                .where(*filters_att)
+                .order_by(Question.order_num)
+                .limit(count)   # har bo'limda max count ta savol
+            )
             r = await s.execute(q)
             return r.scalars().all()
 
@@ -396,12 +395,11 @@ async def get_questions(subject: str, category: str,
             filters.append(Question.difficulty == difficulty)
 
         if not telegram_id:
-            # Foydalanuvchi aniqlanmagan — oddiy random
             q = select(Question).where(*filters).order_by(func.random()).limit(count)
             r = await s.execute(q)
             return r.scalars().all()
 
-        # 1. Xato qilingan savollar (wrong_count bo'yicha kamayish tartibida)
+        # Xato qilingan savollar (wrong_count bo'yicha kamayish)
         wrong_q = (
             select(Question)
             .join(UserWrongQuestion, UserWrongQuestion.question_id == Question.id)
@@ -412,31 +410,28 @@ async def get_questions(subject: str, category: str,
             .order_by(UserWrongQuestion.wrong_count.desc())
             .limit(count)
         )
-        wrong_r = await s.execute(wrong_q)
-        wrong_questions = list(wrong_r.scalars().all())
-        wrong_ids = [q.id for q in wrong_questions]
-
-        remaining = count - len(wrong_questions)
+        wrong_r    = await s.execute(wrong_q)
+        wrong_qs   = list(wrong_r.scalars().all())
+        wrong_ids  = [q.id for q in wrong_qs]
+        remaining  = count - len(wrong_qs)
 
         if remaining <= 0:
-            return wrong_questions[:count]
+            return wrong_qs[:count]
 
-        # 2. Yangi savollar (xato qilinmaganlar)
         new_filters = filters + [Question.id.notin_(wrong_ids)] if wrong_ids else filters
         new_q = select(Question).where(*new_filters).order_by(func.random()).limit(remaining)
         new_r = await s.execute(new_q)
-        new_questions = list(new_r.scalars().all())
+        new_qs = list(new_r.scalars().all())
 
-        # Xato savollar oldin, keyin yangilar
         import random
-        random.shuffle(new_questions)
-        return wrong_questions + new_questions
+        random.shuffle(new_qs)
+        return wrong_qs + new_qs
+
 
 async def count_questions(subject: str = None, category: str = None,
                            subcategory: str = None, difficulty: str = None,
                            is_attestation: bool = False,
                            subcategory_prefix: str = None) -> int:
-    """subcategory_prefix — LIKE filter, masalan '10_' barcha 10-sinf boblarini topadi."""
     async with _conn.AsyncSessionLocal() as s:
         filters = []
         if subject:        filters.append(Question.subject == subject)
@@ -452,6 +447,7 @@ async def count_questions(subject: str = None, category: str = None,
             q = q.where(*filters)
         r = await s.execute(q)
         return r.scalar() or 0
+
 
 async def add_question(subject, category, question_text,
                         option_a, option_b, option_c, option_d,
@@ -473,8 +469,8 @@ async def add_question(subject, category, question_text,
         ))
         await s.commit()
 
+
 async def mark_wrong_question(telegram_id: int, question_id: int):
-    """Foydalanuvchi xato qilgan savolni qayd etish"""
     async with _conn.AsyncSessionLocal() as s:
         existing = await s.execute(
             select(UserWrongQuestion).where(
@@ -485,7 +481,7 @@ async def mark_wrong_question(telegram_id: int, question_id: int):
         existing = existing.scalar_one_or_none()
         if existing:
             existing.wrong_count += 1
-            existing.last_wrong = datetime.utcnow()
+            existing.last_wrong = _now()
         else:
             s.add(UserWrongQuestion(
                 telegram_id=telegram_id,
@@ -494,8 +490,8 @@ async def mark_wrong_question(telegram_id: int, question_id: int):
             ))
         await s.commit()
 
+
 async def mark_correct_question(telegram_id: int, question_id: int):
-    """Foydalanuvchi to'g'ri javob bergan savolni xatolar ro'yxatidan olib tashlash"""
     async with _conn.AsyncSessionLocal() as s:
         await s.execute(
             delete(UserWrongQuestion).where(
@@ -505,15 +501,18 @@ async def mark_correct_question(telegram_id: int, question_id: int):
         )
         await s.commit()
 
+
 async def get_question_by_id(qid: int):
     async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(select(Question).where(Question.id == qid))
         return r.scalar_one_or_none()
 
+
 async def update_question(qid: int, **kwargs):
-    allowed = ['subject','category','subcategory','difficulty','is_attestation',
-               'order_num','question_text','option_a','option_b','option_c',
-               'option_d','correct_answer','image_file_id']
+    allowed = ['subject', 'category', 'subcategory', 'difficulty', 'is_attestation',
+               'order_num', 'question_text', 'option_a', 'option_b', 'option_c',
+               'option_d', 'correct_answer', 'image_file_id',
+               'question_type', 'written_parts', 'keywords_1', 'keywords_2']
     values = {k: v for k, v in kwargs.items() if k in allowed}
     if not values:
         return
@@ -521,18 +520,23 @@ async def update_question(qid: int, **kwargs):
         await s.execute(update(Question).where(Question.id == qid).values(**values))
         await s.commit()
 
+
 async def delete_question(qid: int):
     async with _conn.AsyncSessionLocal() as s:
         await s.execute(delete(Question).where(Question.id == qid))
         await s.commit()
 
+
 async def get_all_questions() -> list:
-    """Bazadagi barcha savollarni qaytaradi."""
     async with _conn.AsyncSessionLocal() as s:
         r = await s.execute(
-            select(Question).order_by(Question.subject, Question.category, Question.subcategory, Question.order_num, Question.id)
+            select(Question).order_by(
+                Question.subject, Question.category,
+                Question.subcategory, Question.order_num, Question.id
+            )
         )
         return r.scalars().all()
+
 
 async def get_questions_page(subject=None, category=None, offset=0, limit=5):
     async with _conn.AsyncSessionLocal() as s:
@@ -545,6 +549,7 @@ async def get_questions_page(subject=None, category=None, offset=0, limit=5):
         r = await s.execute(q)
         return r.scalars().all()
 
+
 async def search_questions(keyword: str, subject: str = None):
     async with _conn.AsyncSessionLocal() as s:
         filters = [Question.question_text.ilike(f"%{keyword}%")]
@@ -554,6 +559,7 @@ async def search_questions(keyword: str, subject: str = None):
             select(Question).where(*filters).order_by(Question.id.desc()).limit(30)
         )
         return r.scalars().all()
+
 
 # ──────────────────────────────────────────────
 # TEST RESULTS
@@ -566,7 +572,6 @@ async def save_test_result(telegram_id, subject, category, subcategory,
         total = correct + wrong + skipped
         score = round((correct / total) * 100, 1) if total > 0 else 0.0
 
-        # Attempt raqamini hisoblash
         r = await s.execute(
             select(func.count()).select_from(TestResult).where(
                 TestResult.telegram_id == telegram_id,
@@ -585,11 +590,12 @@ async def save_test_result(telegram_id, subject, category, subcategory,
             total=total, correct=correct, wrong=wrong,
             skipped=skipped, score=score,
             attempt_number=attempt,
-            started_at=datetime.utcnow(),
-            finished_at=datetime.utcnow()
+            started_at=_now(),
+            finished_at=_now()
         ))
         await s.commit()
         return score
+
 
 async def get_user_results(telegram_id: int, limit: int = 10):
     async with _conn.AsyncSessionLocal() as s:
@@ -601,8 +607,9 @@ async def get_user_results(telegram_id: int, limit: int = 10):
         )
         return r.scalars().all()
 
+
 # ──────────────────────────────────────────────
-# LEADERBOARD
+# LEADERBOARD & STATISTICS
 # ──────────────────────────────────────────────
 
 async def get_leaderboard(limit: int = 10):
@@ -621,9 +628,6 @@ async def get_leaderboard(limit: int = 10):
         )
         return r.all()
 
-# ──────────────────────────────────────────────
-# STATISTICS
-# ──────────────────────────────────────────────
 
 async def get_full_stats() -> dict:
     async with _conn.AsyncSessionLocal() as s:
@@ -631,17 +635,14 @@ async def get_full_stats() -> dict:
             r = await s.execute(q)
             return r.scalar() or 0
 
-        from database.models import Subscription
-        now = datetime.utcnow()
+        now = _now()
+        today = datetime(now.year, now.month, now.day, tzinfo=now.tzinfo)
 
         stats = {
-            # Foydalanuvchilar
             'total_users':         await scalar(select(func.count()).select_from(User)),
             'registered':          await scalar(select(func.count()).select_from(User).where(User.is_registered == True)),
-            # To'lovlar
             'pending':             await scalar(select(func.count()).select_from(Purchase).where(Purchase.status == 'pending')),
             'confirmed_purchases': await scalar(select(func.count()).select_from(Purchase).where(Purchase.status == 'confirmed')),
-            # Faol obunalar
             'active_daily':        await scalar(
                 select(func.count()).select_from(Subscription)
                 .join(Purchase, Subscription.purchase_id == Purchase.id)
@@ -654,13 +655,11 @@ async def get_full_stats() -> dict:
                 .where(Subscription.expires_at > now, Subscription.sub_type == 'monthly',
                        Purchase.status == 'confirmed')
             ),
-            # Testlar
             'total_tests':         await scalar(select(func.count()).select_from(TestResult)),
             'today_tests':         await scalar(
                 select(func.count()).select_from(TestResult)
-                .where(TestResult.finished_at >= datetime(now.year, now.month, now.day))
+                .where(TestResult.finished_at >= today)
             ),
-            # Savollar
             'total_questions':     await scalar(select(func.count()).select_from(Question)),
             'onatili_q':           await scalar(select(func.count()).select_from(Question).where(Question.subject == 'onatili')),
             'adabiyot_q':          await scalar(select(func.count()).select_from(Question).where(Question.subject == 'adabiyot')),
@@ -668,14 +667,14 @@ async def get_full_stats() -> dict:
             'milliy_q':            await scalar(select(func.count()).select_from(Question).where(Question.subject == 'milliy')),
         }
         avg_r = await s.execute(select(func.avg(TestResult.score)))
-        avg = avg_r.scalar()
+        avg   = avg_r.scalar()
         stats['avg_score'] = round(float(avg), 1) if avg else 0
         return stats
+
 
 async def delete_questions_by_filter(subject: str = None, category: str = None,
                                        subcategory: str = None,
                                        subcategory_prefix: str = None) -> int:
-    """Bo'lim bo'yicha savollarni o'chirish. subcategory_prefix — LIKE filter."""
     async with _conn.AsyncSessionLocal() as s:
         filters = []
         if subject:            filters.append(Question.subject == subject)
@@ -689,8 +688,8 @@ async def delete_questions_by_filter(subject: str = None, category: str = None,
         await s.commit()
         return result.rowcount
 
+
 async def delete_all_questions() -> int:
-    """Barcha savollarni o'chirish, o'chirilgan soni qaytaradi"""
     async with _conn.AsyncSessionLocal() as s:
         result = await s.execute(delete(Question))
         await s.commit()

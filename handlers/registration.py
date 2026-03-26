@@ -5,7 +5,7 @@ from aiogram.filters import CommandStart, Command
 
 from database.db import (
     get_user, create_user, update_user_phone,
-    is_registered, get_user_results, get_leaderboard, get_full_stats
+    is_registered, get_user_results, get_leaderboard
 )
 from keyboards.keyboards import (
     phone_keyboard, main_menu_keyboard,
@@ -191,34 +191,6 @@ async def cmd_admin(message: Message):
     await message.answer(
         "🔐 <b>Admin panel</b>",
         reply_markup=admin_keyboard(),
-        parse_mode="HTML"
-    )
-
-@router.message(F.text == "📊 Statistika")
-async def admin_stats(message: Message):
-    if message.from_user.id not in config.ADMIN_IDS:
-        return
-    s = await get_full_stats()
-    await message.answer(
-        f"📊 <b>Statistika</b>\n\n"
-        f"👥 Jami foydalanuvchi: <b>{s['total_users']}</b>\n"
-        f"✅ Ro'yxatdan o'tgan: <b>{s['registered']}</b>\n\n"
-        f"💳 <b>To'lovlar:</b>\n"
-        f"⏳ Kutayotgan: <b>{s['pending']}</b>\n"
-        f"✅ Tasdiqlangan: <b>{s['confirmed_purchases']}</b>\n\n"
-        f"📅 <b>Faol obunalar:</b>\n"
-        f"Kunlik: <b>{s['active_daily']}</b>  |  "
-        f"Oylik: <b>{s['active_monthly']}</b>\n\n"
-        f"📝 <b>Testlar:</b>\n"
-        f"Jami: <b>{s['total_tests']}</b>  |  "
-        f"Bugun: <b>{s['today_tests']}</b>\n"
-        f"📈 O'rtacha ball: <b>{s['avg_score']}%</b>\n\n"
-        f"❓ <b>Savollar:</b>\n"
-        f"Jami: <b>{s['total_questions']}</b>\n"
-        f"📚 Ona tili: <b>{s['onatili_q']}</b>\n"
-        f"📖 Adabiyot: <b>{s['adabiyot_q']}</b>\n"
-        f"🎓 Attestatsiya: <b>{s['attestation_q']}</b>\n"
-        f"🏅 Milliy: <b>{s['milliy_q']}</b>",
         parse_mode="HTML"
     )
 

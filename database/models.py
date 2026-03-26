@@ -1,12 +1,18 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     BigInteger, Boolean, Column, DateTime, ForeignKey,
     Integer, Numeric, String, Text, UniqueConstraint
 )
 from sqlalchemy.orm import DeclarativeBase
 
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
 class Base(DeclarativeBase):
     pass
+
 
 class User(Base):
     __tablename__ = "users"
@@ -16,23 +22,21 @@ class User(Base):
     full_name     = Column(String(255))
     username      = Column(String(100))
     is_registered = Column(Boolean, default=False)
-    registered_at = Column(DateTime, default=datetime.utcnow)
+    registered_at = Column(DateTime(timezone=True), default=_now)
 
 
 class Purchase(Base):
     __tablename__ = "purchases"
     id           = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id  = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
-    # 'once' | 'daily' | 'monthly' | 'attestation_onatili' | 'attestation_adabiyot'
     product_type = Column(String(50), nullable=False)
-    # 'onatili:mavzu:fonetika' kabi kalit (once uchun)
     retry_key    = Column(String(200))
     amount       = Column(Integer, nullable=False)
     check_photo  = Column(String(200))
     status       = Column(String(20), default="pending")  # pending|confirmed|rejected
-    is_used      = Column(Boolean, default=False)           # once uchun: ishlatilganmi
-    submitted_at = Column(DateTime, default=datetime.utcnow)
-    confirmed_at = Column(DateTime)
+    is_used      = Column(Boolean, default=False)
+    submitted_at = Column(DateTime(timezone=True), default=_now)
+    confirmed_at = Column(DateTime(timezone=True))
     confirmed_by = Column(BigInteger)
 
 
@@ -51,10 +55,9 @@ class Subscription(Base):
     __tablename__ = "subscriptions"
     id           = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id  = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
-    # 'daily' | 'monthly'
-    sub_type     = Column(String(20), nullable=False)
-    started_at   = Column(DateTime, default=datetime.utcnow)
-    expires_at   = Column(DateTime, nullable=False)
+    sub_type     = Column(String(20), nullable=False)  # 'daily' | 'monthly'
+    started_at   = Column(DateTime(timezone=True), default=_now)
+    expires_at   = Column(DateTime(timezone=True), nullable=False)
     purchase_id  = Column(Integer, ForeignKey("purchases.id"))
 
 
@@ -66,7 +69,7 @@ class AttestationAccess(Base):
     telegram_id  = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
     subject      = Column(String(50), nullable=False)
     format       = Column(String(20))
-    purchased_at = Column(DateTime, default=datetime.utcnow)
+    purchased_at = Column(DateTime(timezone=True), default=_now)
 
 
 class Question(Base):
@@ -79,18 +82,17 @@ class Question(Base):
     is_attestation = Column(Boolean, default=False)
     order_num      = Column(Integer)
     question_text  = Column(Text, nullable=False)
-    option_a       = Column(Text)   # yozma savol uchun None bo'lishi mumkin
+    option_a       = Column(Text)
     option_b       = Column(Text)
     option_c       = Column(Text)
     option_d       = Column(Text)
-    correct_answer = Column(String(1))  # yozma savol uchun None
-    # Yozma savol uchun
+    correct_answer = Column(String(1))
     question_type  = Column(String(20), default='choice')  # 'choice' | 'written'
-    written_parts  = Column(Integer, default=1)            # 1 yoki 2 (qism soni)
-    keywords_1     = Column(Text)   # 1-qism kalit so'zlari (vergul bilan)
-    keywords_2     = Column(Text)   # 2-qism kalit so'zlari (faqat 2 qismli uchun)
+    written_parts  = Column(Integer, default=1)
+    keywords_1     = Column(Text)
+    keywords_2     = Column(Text)
     image_file_id  = Column(String(200))
-    created_at     = Column(DateTime, default=datetime.utcnow)
+    created_at     = Column(DateTime(timezone=True), default=_now)
 
 
 class UserWrongQuestion(Base):
@@ -101,7 +103,7 @@ class UserWrongQuestion(Base):
     telegram_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
     question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
     wrong_count = Column(Integer, default=1)
-    last_wrong  = Column(DateTime, default=datetime.utcnow)
+    last_wrong  = Column(DateTime(timezone=True), default=_now)
 
 
 class TestResult(Base):
@@ -119,5 +121,5 @@ class TestResult(Base):
     skipped        = Column(Integer, default=0)
     score          = Column(Numeric(5, 2), default=0)
     attempt_number = Column(Integer, default=1)
-    started_at     = Column(DateTime)
-    finished_at    = Column(DateTime, default=datetime.utcnow)
+    started_at     = Column(DateTime(timezone=True))
+    finished_at    = Column(DateTime(timezone=True), default=_now)

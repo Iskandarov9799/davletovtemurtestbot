@@ -241,10 +241,18 @@ def addq_category_keyboard(subject: str):
             [InlineKeyboardButton(text="📖 Badiiy parchalar",  callback_data="addq:cat:badiiy")],
         ]
     elif subject == 'attestation':
-        # Attestatsiya — to'g'ridan savol turi tanlash
-        buttons = [
-            [InlineKeyboardButton(text="🔘 Variantli (A/B/C/D)",  callback_data="addq:qtype:choice")],
-        ]
+        # Attestatsiya — avval bo'lim, keyin savol turi
+        buttons = []
+        row = []
+        for i in range(1, 11):
+            row.append(InlineKeyboardButton(
+                text=f"{i}-bo'lim",
+                callback_data=f"addq:attest_bolim:{i}"
+            ))
+            if len(row) == 2:
+                buttons.append(row); row = []
+        if row: buttons.append(row)
+        buttons.append([InlineKeyboardButton(text="🔘 Barcha bo'limlar (umumiy)", callback_data="addq:attest_bolim:0")])
     elif subject == 'milliy':
         # Milliy sertifikat — variantli yoki yozma
         buttons = [
@@ -308,3 +316,23 @@ def correct_answer_keyboard():
         InlineKeyboardButton(text="C", callback_data="addq:correct:C"),
         InlineKeyboardButton(text="D", callback_data="addq:correct:D"),
     ]])
+# ══════════════════════════════════════════════
+# ATTESTATSIYA — 10 TA BO'LIM
+# ══════════════════════════════════════════════
+
+def attestation_bolimlar_keyboard():
+    """Attestatsiya 10 ta bo'lim"""
+    buttons = []
+    row = []
+    for i in range(1, 11):
+        row.append(InlineKeyboardButton(
+            text=f"📋 {i}-bo'lim",
+            callback_data=f"attest:bolim:{i}"
+        ))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="back:main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

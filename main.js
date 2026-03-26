@@ -99,11 +99,20 @@ function initTest() {
   current    = 0;
   resultSent = false;
 
-  const SUBJ = { onatili:'📚 Ona tili', adabiyot:'📖 Adabiyot' };
+  const SUBJ = {
+    onatili:     '📚 Ona tili',
+    adabiyot:    '📖 Adabiyot',
+    attestation: '🎓 Attestatsiya',
+    milliy:      '🏅 Milliy sertifikat',
+  };
   const titleEl = document.getElementById('header-title') || document.getElementById('hdr-title');
   if (titleEl) titleEl.textContent = SUBJ[meta.subject] || '📚 Test';
   const subEl = document.getElementById('header-sub') || document.getElementById('hdr-sub');
-  if (subEl) subEl.textContent = meta.category || '';
+  // Subcategory ko'rsatish (masalan: 1-bo'lim)
+  let subLabel = meta.subcategory
+    ? meta.subcategory.replace("bolim_", "") + "-bo'lim"
+    : (meta.category || '');
+  if (subEl) subEl.textContent = subLabel;
 
   if (tg) {
     tg.setHeaderColor?.('#0a0e1a');
@@ -435,12 +444,22 @@ function showResult() {
   document.getElementById('test-screen').style.display   = 'none';
   document.getElementById('result-screen').style.display = 'flex';
 
-  const [, emoji, grade] = [
-    [90, '🏆', "A'lo (5)"],
-    [70, '🎉', 'Yaxshi (4)'],
-    [50, '📚', 'Qoniqarli (3)'],
-    [0,  '😔', 'Qoniqarsiz (2)'],
-  ].find(([min]) => pct >= min);
+  // Baho tizimi
+  let emoji, grade;
+  if (meta.is_attestation || meta.subject === 'attestation' || meta.subject === 'milliy') {
+    // Attestatsiya baho tizimi
+    if      (pct >= 86) { emoji = '🏆'; grade = 'Oliy + 70% ustama'; }
+    else if (pct >= 80) { emoji = '🥇'; grade = 'Oliy'; }
+    else if (pct >= 70) { emoji = '🥈'; grade = '1-toifa'; }
+    else if (pct >= 60) { emoji = '🥉'; grade = '2-toifa'; }
+    else                { emoji = '📋'; grade = 'Mutaxassis'; }
+  } else {
+    // Oddiy test bahosi (5 balli)
+    if      (pct >= 90) { emoji = '🏆'; grade = "A'lo (5)"; }
+    else if (pct >= 70) { emoji = '🎉'; grade = 'Yaxshi (4)'; }
+    else if (pct >= 50) { emoji = '📚'; grade = 'Qoniqarli (3)'; }
+    else                { emoji = '😔'; grade = 'Qoniqarsiz (2)'; }
+  }
 
   // style.css elementlari
   const emojiEl = document.getElementById('result-emoji') || document.getElementById('r-emoji');

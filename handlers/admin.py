@@ -1,7 +1,7 @@
 import io
 import openpyxl
 from aiogram import Router, F, Bot
-from aiogram.types import Message, BufferedInputFile
+from aiogram.types import Message, BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
 from database.db import (
@@ -228,8 +228,6 @@ async def add_question_start(message: Message, state: FSMContext):
     await state.set_state(AdminStates.add_subject)
 
 # Fan tanlash
-from aiogram.types import CallbackQuery
-
 @router.callback_query(F.data.startswith("addq:subject:"))
 async def addq_subject(callback: CallbackQuery, state: FSMContext):
     subject = callback.data.split(":")[2]
@@ -339,10 +337,43 @@ async def addq_sub(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("addq:grade:"))
 async def addq_grade(callback: CallbackQuery, state: FSMContext):
-    grade = callback.data.split(":")[2]
-    await state.update_data(subcategory=grade, is_attestation=False)
+    grade      = callback.data.split(":")[2]
+    grade_name = config.GRADES.get(grade, f"{grade}-sinf")
+    boblar     = config.ADABIYOT_BOBLAR.get(grade, {})
+
+    if boblar:
+        # Bob tanlash oqimi
+        await state.update_data(grade=grade, is_attestation=False)
+        from keyboards.keyboards import addq_bob_keyboard
+        await callback.message.edit_text(
+            f"🏫 <b>{grade_name}</b>\n\nBobni tanlang:",
+            reply_markup=addq_bob_keyboard(grade),
+            parse_mode="HTML"
+        )
+    else:
+        # Bob yo'q — to'g'ridan rasm
+        await state.update_data(subcategory=grade, is_attestation=False)
+        await callback.message.answer(
+            f"🏫 <b>{grade_name}</b>\n\n📸 Rasm yuboring yoki o'tkazib yuboring:",
+            reply_markup=skip_image_keyboard(),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.add_image)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("addq:bob:"))
+async def addq_bob(callback: CallbackQuery, state: FSMContext):
+    bob_key = callback.data.split(":")[2]
+    data    = await state.get_data()
+    grade   = data.get("grade", "")
+    subcategory = f"{grade}_{bob_key}" if grade else bob_key
+    grade_name  = config.GRADES.get(grade, f"{grade}-sinf")
+    bob_name    = config.ADABIYOT_BOBLAR.get(grade, {}).get(bob_key, f"{bob_key}-bob")
+
+    await state.update_data(subcategory=subcategory, is_attestation=False)
     await callback.message.answer(
-        f"🏫 <b>{grade}-sinf</b>\n\n📸 Rasm yuboring yoki o'tkazib yuboring:",
+        f"📖 <b>{grade_name} — {bob_name}</b>\n\n📸 Rasm yuboring yoki o'tkazib yuboring:",
         reply_markup=skip_image_keyboard(),
         parse_mode="HTML"
     )
@@ -440,6 +471,32 @@ async def addq_d(message: Message, state: FSMContext):
     await state.set_state(AdminStates.add_correct)
 
 # Savol turi tanlash (attestation/milliy uchun)
+# Attestatsiya bo'lim tanlash
+@router.callback_query(F.data.startswith("addq:attest_bolim:"))
+async def addq_attest_bolim(callback: CallbackQuery, state: FSMContext):
+    bolim_num = int(callback.data.split(":")[2])
+    if bolim_num == 0:
+        subcategory = None  # Umumiy
+        bolim_label = "Barcha bo'limlar (umumiy)"
+    else:
+        subcategory = f"bolim_{bolim_num}"
+        bolim_label = f"{bolim_num}-bo'lim"
+
+    await state.update_data(subcategory=subcategory, bolim_label=bolim_label)
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    await callback.message.edit_text(
+        f"🎓 <b>Attestatsiya — {bolim_label}</b>\n\nSavol turini tanlang:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔘 Variantli (A/B/C/D)", callback_data="addq:qtype:choice")],
+            [InlineKeyboardButton(text="❌ Bekor", callback_data="addq:cancel")],
+        ]),
+        parse_mode="HTML"
+    )
+    await state.set_state(AdminStates.add_is_attest)
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("addq:qtype:"))
 async def addq_qtype(callback: CallbackQuery, state: FSMContext):
     qtype   = callback.data.split(":")[2]
@@ -450,16 +507,26 @@ async def addq_qtype(callback: CallbackQuery, state: FSMContext):
 
     if qtype == 'choice':
         await state.update_data(question_type='choice', written_parts=1)
-        cnt = await count_questions(subject=subject, category=subject, is_attestation=True)
+        data = await state.get_data()
+        subject = data.get('subject', 'onatili')
+        subcategory = data.get('subcategory')
+        cnt = await count_questions(subject=subject, category=subject,
+                                    subcategory=subcategory, is_attestation=True)
+        bolim_label = data.get('bolim_label', '')
+        bolim_info  = f" — {bolim_label}" if bolim_label else ""
         await callback.message.edit_text(
-            f"{label} — Variantli savol\n\nTartib raqamini yozing (<code>{cnt + 1}</code>):",
+            f"{label}{bolim_info} — Variantli savol\n\nTartib raqamini yozing (<code>{cnt + 1}</code>):",
             parse_mode="HTML"
         )
         await state.set_state(AdminStates.add_order_num)
     elif qtype in ('written1', 'written2'):
         parts = 1 if qtype == 'written1' else 2
         await state.update_data(question_type='written', written_parts=parts)
-        cnt = await count_questions(subject=subject, category=subject, is_attestation=True)
+        data = await state.get_data()
+        subject = data.get('subject', 'onatili')
+        subcategory = data.get('subcategory')
+        cnt = await count_questions(subject=subject, category=subject,
+                                    subcategory=subcategory, is_attestation=True)
         await callback.message.edit_text(
             f"{label} — Yozma savol ({parts} qism)\n\nTartib raqamini yozing (<code>{cnt + 1}</code>):",
             parse_mode="HTML"
@@ -476,6 +543,7 @@ async def addq_correct(callback: CallbackQuery, state: FSMContext):
 
     subj = data['subject']
     cat  = data.get('category', subj)  # attestation/milliy uchun category=subject
+    subcat = data.get('subcategory')
 
     await add_question(
         subject        = subj,
@@ -486,7 +554,7 @@ async def addq_correct(callback: CallbackQuery, state: FSMContext):
         option_c       = data.get('option_c'),
         option_d       = data.get('option_d'),
         correct_answer = correct,
-        subcategory    = data.get('subcategory'),
+        subcategory    = subcat,
         difficulty     = None,
         is_attestation = data.get('is_attestation', False),
         order_num      = data.get('order_num'),
@@ -497,10 +565,11 @@ async def addq_correct(callback: CallbackQuery, state: FSMContext):
 
     SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot',
              'attestation': '🎓 Attestatsiya', 'milliy': '🏅 Milliy sertifikat'}
+    bolim_label = data.get('bolim_label', '')
+    bolim_info  = f" — {bolim_label}" if bolim_label else (f" — {subcat}" if subcat else "")
     await callback.message.edit_text(
         f"✅ <b>Savol qo'shildi!</b>\n\n"
-        f"📚 {SUBJ.get(subj, subj)} | {cat}\n"
-        f"🔑 Subcategory: {data.get('subcategory') or '—'}\n"
+        f"📚 {SUBJ.get(subj, subj)}{bolim_info}\n"
         f"✅ To'g'ri javob: <b>{correct}</b>",
         parse_mode="HTML"
     )
@@ -538,7 +607,6 @@ async def delete_questions_confirm(message: Message):
         parse_mode="HTML"
     )
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 @router.callback_query(F.data == "admin:delete_all_q")
 async def delete_questions_execute(callback: CallbackQuery):
@@ -1206,12 +1274,19 @@ async def excel_import_start(message: Message):
         ["adabiyot", "sheriy", None, "FALSE", None,
          "Tashbeh nima?", "O'xshatish", "Mubolag'a", "Takror", "Irsoli masal", "A",
          "choice", 1, None, None],
-        # Attestatsiya — subject="attestation", 1-35 variantli, fan ajratilmaydi
-        ["attestation", "attestation", None, "TRUE", 1,
+        # Attestatsiya — 1-bo'lim (subcategory="bolim_1")
+        ["attestation", "attestation", "bolim_1", "TRUE", 1,
          "Fonetika nimani o'rganadi?", "So'z ma'nosini", "Tovush va harflarni", "Gap tuzilishini", "So'z yasalishini", "B",
          "choice", 1, None, None],
-        ["attestation", "attestation", None, "TRUE", 2,
+        ["attestation", "attestation", "bolim_1", "TRUE", 2,
          "Navoiy qaysi asrda yashagan?", "XIV asr", "XV asr", "XVI asr", "XIII asr", "B",
+         "choice", 1, None, None],
+        # Attestatsiya — 2-bo'lim (subcategory="bolim_2")
+        ["attestation", "attestation", "bolim_2", "TRUE", 1,
+         "Sintaksis nimani o'rganadi?", "So'z yasalishini", "Gap qurilishini", "Tovushlarni", "So'z ma'nosini", "B",
+         "choice", 1, None, None],
+        ["attestation", "attestation", "bolim_2", "TRUE", 2,
+         "G'azal janrining asosiy belgisi nima?", "Bayt", "Qofiya", "Radif", "Maqta", "B",
          "choice", 1, None, None],
         # Milliy sertifikat — subject="milliy", variantli (1-35)
         ["milliy", "milliy", None, "TRUE", 1,
@@ -1284,7 +1359,10 @@ async def excel_import_start(message: Message):
         ("", ""),
         ("ESLATMA: difficulty ustuni yo'q!", ""),
         ("", ""),
-        ("ATTESTATSIYA", "subject=attestation, category=attestation, fan ajratilmaydi, faqat 1-35 variantli"),
+        ("ATTESTATSIYA", "subject=attestation, category=attestation"),
+        ("  subcategory", "bolim_1 | bolim_2 | bolim_3 | ... | bolim_10"),
+        ("  Har bir bo'lim", "35 ta savol, variantli (A/B/C/D)"),
+        ("  order_num", "Har bir bo'lim ichida 1 dan boshlanadi (1, 2, 3...)"),
         ("MILLIY SERTIFIKAT", "subject=milliy, category=milliy, fan ajratilmaydi"),
         ("  1-35 savol",  "question_type=choice"),
         ("  36-38 savol", "question_type=written, written_parts=1"),
@@ -1334,6 +1412,18 @@ async def excel_import_start(message: Message):
         ("5 / 5_1 / 5_2 / 5_3 / 5_4",  "5-sinf barcha / bob bo'yicha"),
         ("6...10 uchun ham xuddi shunday", ""),
         ("11 / 11_1 / 11_2 / 11_3 / 11_4", "11-sinf"),
+        ("ATTESTATSIYA — SUBCATEGORY", ""),
+        ("bolim_1",  "1-bo'lim savollar (order_num=1,2,3...)"),
+        ("bolim_2",  "2-bo'lim savollar"),
+        ("bolim_3",  "3-bo'lim savollar"),
+        ("bolim_4",  "4-bo'lim savollar"),
+        ("bolim_5",  "5-bo'lim savollar"),
+        ("bolim_6",  "6-bo'lim savollar"),
+        ("bolim_7",  "7-bo'lim savollar"),
+        ("bolim_8",  "8-bo'lim savollar"),
+        ("bolim_9",  "9-bo'lim savollar"),
+        ("bolim_10", "10-bo'lim savollar"),
+        ("", ""),
         ("category = gazallar",  "subcategory = bo'sh"),
         ("category = sheriy",    "subcategory = bo'sh"),
         ("category = badiiy",    "subcategory = bo'sh"),
@@ -1401,6 +1491,8 @@ async def excel_import_upload(message: Message):
     VALID_CATEGORIES = {'mavzu', 'aralash', 'sinf', 'gazallar',
                         'sheriy', 'badiiy', 'attestation', 'milliy'}
     VALID_CORRECT    = {'A', 'B', 'C', 'D'}
+    # Attestatsiya subcategory — bolim_1 ... bolim_10 yoki None
+    VALID_ATTEST_SUBCATS = {f"bolim_{i}" for i in range(1, 11)} | {None, ""}
 
     added   = 0
     skipped = 0

@@ -1,18 +1,11 @@
 import json
-import base64
-import zlib
 import logging
 from aiogram import Router, F, Bot
-from aiogram.types import (
-    Message, CallbackQuery,
-    InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-)
-from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
 
 from database.db import (
     is_registered,
-    get_access_status,
-    get_questions,
+    get_user,
     save_test_result,
     mark_wrong_question,
     mark_correct_question,
@@ -23,125 +16,46 @@ from config import config
 logger = logging.getLogger(__name__)
 router = Router()
 
-DIFFICULTY_NAMES = {
-    'easy':   '🟢 Oson',
-    'medium': "🟡 O'rta",
-    'hard':   '🔴 Qiyin',
-    'mixed':  '🎲 Aralash',
-}
-
-
-def compress_questions(data: dict | list) -> str:
-    """Savollarni compress qilib base64 ga o'girish"""
-    raw        = json.dumps(data, ensure_ascii=False, separators=(',', ':'))
-    compressed = zlib.compress(raw.encode('utf-8'), level=9)
-    return base64.urlsafe_b64encode(compressed).decode('ascii')
-
-
-def miniapp_keyboard(url: str):
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="🚀 Testni boshlash", web_app=WebAppInfo(url=url))
-    ]])
-
-
-def difficulty_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🟢 Oson",    callback_data="mapp_diff:easy"),
-            InlineKeyboardButton(text="🟡 O'rta",   callback_data="mapp_diff:medium"),
-        ],
-        [
-            InlineKeyboardButton(text="🔴 Qiyin",   callback_data="mapp_diff:hard"),
-            InlineKeyboardButton(text="🎲 Aralash", callback_data="mapp_diff:mixed"),
-        ],
-    ])
-
-
-@router.message(F.text == "📝 Testni boshlash")
-async def open_miniapp(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if not await is_registered(uid):
-        await message.answer("❌ Avval ro'yxatdan o'ting! /start")
-        return
-    status = await get_access_status(uid, access_key="onatili_test")
-    if status == 'buy':
-        await message.answer(
-            "❌ Test uchun to'lov qilishingiz kerak!\n💳 /pay buyrug'ini yuboring.",
-            reply_markup=main_menu_keyboard(),
-        )
-        return
-    await message.answer(
-        "🎯 <b>Qiyinlik darajasini tanlang:</b>",
-        reply_markup=difficulty_keyboard(),
-        parse_mode="HTML",
-    )
-
-
-@router.callback_query(F.data.startswith("mapp_diff:"))
-async def send_questions_to_miniapp(callback: CallbackQuery, state: FSMContext):
-    difficulty = callback.data.split(":")[1]
-    questions = await get_questions(
-        subject='onatili',
-        category=difficulty if difficulty != 'mixed' else 'aralash',
-        difficulty=difficulty if difficulty != 'mixed' else None,
-        count=30,
-        telegram_id=callback.from_user.id,
-    )
-
-    if not questions:
-        await callback.answer("❌ Bu darajada savollar yo'q!", show_alert=True)
-        return
-
-    q_list = [
-        {
-            "id":  q['id'],
-            "t":   q['question_text'],
-            "a":   q['option_a'],
-            "b":   q['option_b'],
-            "c":   q['option_c'],
-            "d":   q['option_d'],
-            "ok":  q['correct_answer'],
-            "img": q.get('image_file_id') or "",
-        }
-        for q in questions
-    ]
-
-    # meta + questions birgalikda yuboriladi — web_app_handler da subject/category kerak
-    payload = {
-        "questions": q_list,
-        "meta": {
-            "subject":    "onatili",
-            "category":   DIFFICULTY_NAMES.get(difficulty, difficulty),
-            "difficulty": difficulty,
-            "is_attestation": False,
-        }
-    }
-
-    encoded    = compress_questions(payload)
-    url        = f"{config.MINI_APP_URL}#{encoded}"
-    diff_label = DIFFICULTY_NAMES.get(difficulty, difficulty)
-
-    await callback.message.edit_text(
-        f"📚 <b>Ona tili va Adabiyot Testi</b>\n\n"
-        f"🎯 Daraja: <b>{diff_label}</b>\n"
-        f"📊 Savollar: <b>{len(q_list)} ta</b>\n\n"
-        f"Pastdagi tugmani bosib testni boshlang 👇",
-        reply_markup=miniapp_keyboard(url),
-        parse_mode="HTML",
-    )
-    await callback.answer()
-
-
 # ══════════════════════════════════════════════
 # NATIJA QABUL QILISH — tg.sendData() dan keladi
 # ══════════════════════════════════════════════
+
+def _attestation_grade(pct: float) -> tuple[str, str]:
+    """
+    Attestatsiya bahosi:
+    59 gacha   → Mutaxassis
+    60-69      → 2-toifa
+    70-79      → 1-toifa
+    80-85      → Oliy
+    86+        → Oliy + 70% ustama
+    """
+    if pct <= 59:
+        return "Mutaxassis", "📋"
+    elif pct <= 69:
+        return "2-toifa", "🥉"
+    elif pct <= 79:
+        return "1-toifa", "🥈"
+    elif pct <= 85:
+        return "Oliy", "🥇"
+    else:
+        return "Oliy + 70% ustama", "🏆"
+
+
 @router.message(F.web_app_data)
 async def receive_miniapp_data(message: Message, bot: Bot):
     user_id  = message.from_user.id
     username = message.from_user.username
-    uname    = f"@{username}" if username else message.from_user.full_name
 
     logger.info(f"📥 web_app_data keldi: user={user_id}")
+
+    # ── Foydalanuvchi ismini olish ──────────────
+    user = await get_user(user_id)
+    if user and user.full_name:
+        full_name = user.full_name
+    else:
+        full_name = message.from_user.full_name or "Noma'lum"
+
+    uname_link = f"@{username}" if username else full_name
 
     # ── JSON parse ──────────────────────────────
     try:
@@ -166,33 +80,67 @@ async def receive_miniapp_data(message: Message, bot: Bot):
 
     logger.info(f"Natija: {correct}/{total} ({pct}%) | user={user_id}")
 
-    # ── Baho ────────────────────────────────────
-    if   pct >= 90: grade, emoji = "A'lo (5)",      "🏆"
-    elif pct >= 70: grade, emoji = "Yaxshi (4)",     "🎉"
-    elif pct >= 50: grade, emoji = "Qoniqarli (3)",  "📚"
-    else:           grade, emoji = "Qoniqarsiz (2)", "😔"
+    # ── Baho hisoblash ──────────────────────────
+    SUBJ_LABELS = {
+        'onatili':     '📚 Ona tili',
+        'adabiyot':    '📖 Adabiyot',
+        'attestation': '🎓 Attestatsiya',
+        'milliy':      '🏅 Milliy sertifikat',
+    }
+    subj_label = SUBJ_LABELS.get(subject, subject)
 
-    encouragement = "🌟 Ajoyib! Shunday davom eting!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
+    if is_attestation or subject in ('attestation', 'milliy'):
+        # Attestatsiya baho tizimi
+        grade_label, grade_emoji = _attestation_grade(pct)
+        if pct >= 86:
+            grade_line = f"🏆 <b>Daraja: {grade_label}</b>"
+        else:
+            grade_line = f"{grade_emoji} <b>Daraja: {grade_label}</b>"
+        encouragement = "🌟 Ajoyib natija!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
+        standard_grade_line = ""
+    else:
+        # Oddiy test bahosi (5 balli)
+        if   pct >= 90: grade, gemoji = "A'lo (5)",      "🏆"
+        elif pct >= 70: grade, gemoji = "Yaxshi (4)",     "🎉"
+        elif pct >= 50: grade, gemoji = "Qoniqarli (3)",  "📚"
+        else:           grade, gemoji = "Qoniqarsiz (2)", "😔"
+        grade_line = f"{gemoji} <b>Baho: {grade}</b>"
+        encouragement = "🌟 Ajoyib! Shunday davom eting!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
+        grade_emoji = gemoji
+        standard_grade_line = grade_line
 
-    # ── Guruhga yuborish (DB dan oldin — crash bo'lsa ham yuborilsin) ──
+    # ── Kategoriya nomi ─────────────────────────
+    # subcategory chiroyli nom: bolim_1 → 1-bo'lim
+    if subcategory and subcategory.startswith('bolim_'):
+        bolim_num  = subcategory.split('_', 1)[1]
+        cat_label  = f" › {bolim_num}-bo'lim"
+    elif subcategory:
+        cat_label  = f" › {subcategory}"
+    elif category:
+        cat_label  = f" › {category}"
+    else:
+        cat_label  = ""
+
+    # ── Guruhga yuborish ─────────────────────────
     if config.RESULT_GROUP_ID:
-        SUBJ = {
-            'onatili':     '📚 Ona tili',
-            'adabiyot':    '📖 Adabiyot',
-            'attestation': '🎓 Attestatsiya',
-            'milliy':      '🏅 Milliy sertifikat',
-        }
-        subj_label = SUBJ.get(subject, subject)
-        cat_label  = f" › {subcategory}" if subcategory else (f" › {category}" if category else "")
         try:
             group_id = int(config.RESULT_GROUP_ID)
-            await bot.send_message(
-                chat_id    = group_id,
-                text       = (
-                    f"{emoji} <b>{uname}</b>\n"
+            if is_attestation or subject in ('attestation', 'milliy'):
+                grade_label, grade_emoji = _attestation_grade(pct)
+                group_text = (
+                    f"{grade_emoji} <b>{full_name}</b> ({uname_link})\n"
+                    f"📌 {subj_label}{cat_label}\n"
+                    f"✅ {correct}/{total} | 📈 {pct:.0f}% | 🎓 {grade_label}"
+                )
+            else:
+                group_text = (
+                    f"{grade_emoji} <b>{full_name}</b> ({uname_link})\n"
                     f"📌 {subj_label}{cat_label}\n"
                     f"✅ {correct}/{total} | 📈 {pct:.0f}% | 🎓 {grade}"
-                ),
+                )
+            await bot.send_message(
+                chat_id    = group_id,
+                text       = group_text,
                 parse_mode = "HTML",
             )
             logger.info(f"✅ Guruhga yuborildi: {group_id}")
@@ -230,18 +178,40 @@ async def receive_miniapp_data(message: Message, bot: Bot):
         except Exception as e:
             logger.warning(f"mark_correct xato qid={qid}: {e}")
 
-    # ── Foydalanuvchiga natija ───────────────────
+    # ── Foydalanuvchiga natija (tepada ism) ──────
     try:
+        if is_attestation or subject in ('attestation', 'milliy'):
+            grade_label, grade_emoji = _attestation_grade(pct)
+            result_text = (
+                f"👤 <b>{full_name}</b>\n"
+                f"━━━━━━━━━━━━━\n"
+                f"📌 {subj_label}{cat_label}\n"
+                f"━━━━━━━━━━━━━\n"
+                f"✅ To'g'ri:     <b>{correct}/{total}</b>\n"
+                f"❌ Xato:        <b>{wrong}/{total}</b>\n"
+                f"⏭ O'tkazildi: <b>{skipped}</b>\n"
+                f"📈 Ball:        <b>{pct:.0f}%</b>\n"
+                f"━━━━━━━━━━━━━\n"
+                f"{grade_emoji} <b>Daraja: {grade_label}</b>\n"
+                f"━━━━━━━━━━━━━\n\n"
+                f"{encouragement}"
+            )
+        else:
+            result_text = (
+                f"👤 <b>{full_name}</b>\n"
+                f"━━━━━━━━━━━━━\n"
+                f"📌 {subj_label}{cat_label}\n"
+                f"━━━━━━━━━━━━━\n"
+                f"✅ To'g'ri:     <b>{correct}/{total}</b>\n"
+                f"❌ Xato:        <b>{wrong}/{total}</b>\n"
+                f"⏭ O'tkazildi: <b>{skipped}</b>\n"
+                f"📈 Ball:        <b>{pct:.0f}%</b>\n"
+                f"🎓 Baho:        <b>{grade}</b>\n"
+                f"━━━━━━━━━━━━━\n\n"
+                f"{encouragement}"
+            )
         await message.answer(
-            f"{emoji} <b>Test natijasi saqlandi!</b>\n\n"
-            f"━━━━━━━━━━━━━\n"
-            f"✅ To'g'ri:     <b>{correct}/{total}</b>\n"
-            f"❌ Xato:        <b>{wrong}/{total}</b>\n"
-            f"⏭ O'tkazildi: <b>{skipped}</b>\n"
-            f"📈 Ball:        <b>{pct:.0f}%</b>\n"
-            f"🎓 Baho:        <b>{grade}</b>\n"
-            f"━━━━━━━━━━━━━\n\n"
-            f"{encouragement}",
+            result_text,
             reply_markup=main_menu_keyboard(),
             parse_mode="HTML",
         )
