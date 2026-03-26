@@ -1,6 +1,6 @@
 import json, base64, zlib, logging
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 from database.db import (
     is_registered, get_access_status, mark_free_used, mark_once_used,
@@ -117,9 +117,9 @@ async def upload_to_cloudinary(file_id: str, bot, config) -> str:
 
 
 def test_link_keyboard(url: str, label: str = "🚀 Testni boshlash"):
-    """Test havolasini inline keyboard tugmasi sifatida yuborish"""
+    """Test havolasini Mini App sifatida ochish"""
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=label, url=url)
+        InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))
     ]])
 
 
