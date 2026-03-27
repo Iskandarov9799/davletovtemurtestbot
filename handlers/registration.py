@@ -182,7 +182,7 @@ async def menu_help(message: Message):
         "• 10 ta bo'lim, har birida 35 ta savol\n"
         "1️⃣ Bo'limni tanlang\n"
         f"2️⃣ To'lov — bir martalik <b>{config.PRICE_ATTESTATION:,} so'm</b>\n"
-        "3️⃣ To'lovdan so'ng barcha 10 bo'lim ochiladi\n\n"
+        "3️⃣ To'lov qilingan bo'lim ochiladi\n\n"
         "💳 <b>TO'LOV TARTIBI</b>\n"
         "1️⃣ Bo'limni tanlang\n"
         "2️⃣ Sotib olish tugmasini bosing\n"
