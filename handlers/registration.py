@@ -163,21 +163,41 @@ async def menu_profile(message: Message):
 
 @router.message(F.text == "ℹ️ Yordam")
 async def menu_help(message: Message):
-    await message.answer(
-        "📚 <b>Ona tili va Adabiyot Test Boti</b>\n\n"
-        "🎯 <b>Qanday ishlaydi?</b>\n"
-        "1️⃣ Telefon raqamingizni ulashing\n"
-        "2️⃣ Fan tanlang (Ona tili / Adabiyot)\n"
-        "3️⃣ Bo'lim va qiyinlik tanlang\n"
-        "4️⃣ <b>Birinchi urinish bepul!</b>\n"
-        "5️⃣ Keyingi urinishlar — {retry:,} so'm\n\n"
-        "🎓 <b>Atestatsiya</b> — {attest:,} so'm (bir martalik)\n\n"
-        "📞 Muammo bo'lsa: @admin_username".format(
-            retry=config.PRICE_RETRY,
-            attest=config.PRICE_ATTESTATION
-        ),
-        parse_mode="HTML"
+    text = (
+        "📚 <b>Ona tili va Adabiyot Test Boti</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📚 <b>ONA TILI</b>\n"
+        "• Mavzulashtirilgan — bo'lim va mavzu tanlang\n"
+        "• Aralash — barcha mavzulardan aralash test\n"
+        f"🎯 Birinchi urinish <b>bepul</b>, keyingisi {config.PRICE_ONCE:,} so'm\n"
+        f"📅 Kunlik obuna — {config.PRICE_DAILY:,} so'm (24 soat)\n"
+        f"📆 Oylik obuna — {config.PRICE_MONTHLY:,} so'm (30 kun)\n\n"
+        "📖 <b>ADABIYOT</b>\n"
+        "• Sinflar bo'yicha (5-11 sinf, boblar)\n"
+        "• Aralash, G'azallar, She'riy san'atlar\n"
+        f"🎯 Birinchi urinish <b>bepul</b>, keyingisi {config.PRICE_ONCE:,} so'm\n"
+        f"📅 Kunlik obuna — {config.PRICE_DAILY:,} so'm (24 soat)\n"
+        f"📆 Oylik obuna — {config.PRICE_MONTHLY:,} so'm (30 kun)\n\n"
+        "🎓 <b>ATESTATSIYA</b>\n"
+        "• 10 ta bo'lim, har birida 35 ta savol\n"
+        "1️⃣ Bo'limni tanlang\n"
+        f"2️⃣ To'lov — bir martalik <b>{config.PRICE_ATTESTATION:,} so'm</b>\n"
+        "3️⃣ To'lovdan so'ng barcha 10 bo'lim ochiladi\n\n"
+        "💳 <b>TO'LOV TARTIBI</b>\n"
+        "1️⃣ Bo'limni tanlang\n"
+        "2️⃣ Sotib olish tugmasini bosing\n"
+        "3️⃣ Karta raqamiga pul o'tkazing\n"
+        "4️⃣ Chek rasmini botga yuboring\n"
+        "5️⃣ Admin tasdiqlaydi — test ochiladi\n\n"
+        "📊 <b>BOSHQA IMKONIYATLAR</b>\n"
+        "• 📊 Natijalarim — oxirgi 10 ta test natijasi\n"
+        "• 🏆 Reyting — eng yaxshi natijalar\n"
+        "• 👤 Profil — shaxsiy ma'lumotlar\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "❓ Muammo bo'lsa adminga yozing"
     )
+    await message.answer(text, parse_mode="HTML")
+
 
 # ══════════════════════════════════════════════
 # Admin
