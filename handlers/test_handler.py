@@ -252,22 +252,16 @@ async def attestation_menu(message: Message):
         return
     tid = message.from_user.id
 
-    if await has_attestation(tid, "attestation"):
-        # Bo'limlar tanlash
-        await message.answer(
-            "🎓 <b>Atestatsiya</b>\n\nBo'limni tanlang:",
-            reply_markup=attestation_bolimlar_keyboard(),
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer(
-            "🎓 <b>Atestatsiya</b>\n\n"
-            "📋 Har bir bo'limda 35 ta savol\n"
-            "💳 Bir martalik to'lov\n\n"
-            f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>",
-            reply_markup=attestation_buy_standalone_keyboard(),
-            parse_mode="HTML"
-        )
+    # Har doim bo'limlar ko'rsatiladi — to'lov bo'lim tanlangandan keyin so'raladi
+    paid = await has_attestation(tid, "attestation")
+    status_text = "" if paid else f"\n💳 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b> (bir martalik)"
+    await message.answer(
+        f"🎓 <b>Atestatsiya</b>\n"
+        f"📋 Har bir bo'limda 35 ta savol{status_text}\n\n"
+        f"Bo'limni tanlang:",
+        reply_markup=attestation_bolimlar_keyboard(),
+        parse_mode="HTML"
+    )
 
 async def _launch_attestation_bolim(message_or_callback, tid: int,
                                      bolim_num: int, is_callback: bool = False):
@@ -531,14 +525,26 @@ async def adabiyot_grade_aralash(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("attest:bolim:"))
 async def attestation_bolim(callback: CallbackQuery):
     bolim_num = int(callback.data.split(":")[2])
-    tid = callback.from_user.id
+    tid       = callback.from_user.id
 
-    # Ruxsatni tekshirish
+    # Sotib olinmagan bo'lsa — bu bo'lim uchun to'lov so'ra
     if not await has_attestation(tid, "attestation"):
         await safe_edit(callback,
-            "🔒 Attestatsiya sotib olinmagan!\n\n"
-            f"Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>",
-            reply_markup=attestation_buy_standalone_keyboard())
+            f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
+            f"📋 35 ta savol | Bir martalik to'lov\n"
+            f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>\n\n"
+            f"To'lov qilganingizdan so'ng <b>barcha 10 bo'lim</b> ochiladi.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text=f"💳 Sotib olish — {config.PRICE_ATTESTATION:,} so'm",
+                    callback_data="buy:attestation"
+                )],
+                [InlineKeyboardButton(
+                    text="🔙 Orqaga",
+                    callback_data="back:attestation"
+                )],
+            ])
+        )
         await callback.answer()
         return
 
