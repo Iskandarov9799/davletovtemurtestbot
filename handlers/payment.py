@@ -65,15 +65,20 @@ async def pay_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data == "buy:attestation")
-async def attestation_pay_standalone(callback: CallbackQuery, state: FSMContext):
-    amount = config.PRICE_ATTESTATION
-    await state.update_data(product_type='attestation', retry_key=None, amount=amount)
+@router.callback_query(F.data.startswith("buy:attest_bolim:"))
+async def attestation_bolim_pay(callback: CallbackQuery, state: FSMContext):
+    bolim_num = callback.data.split(":")[2]
+    amount    = config.PRICE_ATTESTATION
+    # retry_key sifatida bo'lim nomini saqlaymiz
+    bolim_key = f"bolim_{bolim_num}"
+    await state.update_data(
+        product_type='attestation',
+        retry_key=bolim_key,
+        amount=amount
+    )
     await callback.message.edit_text(
-        f"🎓 <b>Atestatsiya</b>\n\n"
-        f"📋 10 ta bo'lim, har birida 35 ta savol\n"
-        f"💳 Bir martalik to'lov\n\n"
-        f"To'lov miqdori: <b>{amount:,} so'm</b>\n\n"
+        f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
+        f"💰 To'lov miqdori: <b>{amount:,} so'm</b>\n\n"
         f"Kartaga o'tkazing:\n"
         f"<code>{config.PAYMENT_CARD}</code>\n"
         f"<b>{config.PAYMENT_OWNER}</b>\n\n"
@@ -266,15 +271,23 @@ async def confirm_payment(callback: CallbackQuery, bot: Bot):
         except Exception:
             pass
 
-    # ── Attestatsiya ──────────────────────────
+    # ── Attestatsiya (har bo'lim alohida) ─────
     elif pt == 'attestation':
-        await grant_attestation(tid, "attestation", "miniapp")
+        # retry_key = "bolim_1" ... "bolim_10"
+        bolim_key = purchase.retry_key or "attestation"
+        await grant_attestation(tid, bolim_key, "miniapp")
+        # Bo'lim nomini chiroyli ko'rsatish
+        if bolim_key.startswith("bolim_"):
+            bolim_num  = bolim_key.split("_")[1]
+            bolim_text = f"{bolim_num}-bo'lim"
+        else:
+            bolim_text = "bo'lim"
         try:
             await bot.send_message(
-                chat_id      = tid,
-                text         = (
-                    "🎓 <b>Atestatsiya sotib olindi!</b>\n\n"
-                    "Quyidagi bo'limlardan birini tanlang:"
+                chat_id    = tid,
+                text       = (
+                    f"🎓 <b>Atestatsiya — {bolim_text} sotib olindi!</b>\n\n"
+                    f"Testni boshlash uchun {bolim_text}ni tanlang:"
                 ),
                 reply_markup = attestation_bolimlar_keyboard(),
                 parse_mode   = "HTML"

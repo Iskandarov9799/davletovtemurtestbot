@@ -252,12 +252,10 @@ async def attestation_menu(message: Message):
         return
     tid = message.from_user.id
 
-    # Har doim bo'limlar ko'rsatiladi — to'lov bo'lim tanlangandan keyin so'raladi
-    paid = await has_attestation(tid, "attestation")
-    status_text = "" if paid else f"\n💳 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b> (bir martalik)"
+    # Har bo'lim alohida to'lov — bo'limlar ko'rsatiladi
     await message.answer(
         f"🎓 <b>Atestatsiya</b>\n"
-        f"📋 Har bir bo'limda 35 ta savol{status_text}\n\n"
+        f"📋 Har bir bo'lim — <b>{config.PRICE_ATTESTATION:,} so'm</b> (bir martalik)\n\n"
         f"Bo'limni tanlang:",
         reply_markup=attestation_bolimlar_keyboard(),
         parse_mode="HTML"
@@ -527,17 +525,18 @@ async def attestation_bolim(callback: CallbackQuery):
     bolim_num = int(callback.data.split(":")[2])
     tid       = callback.from_user.id
 
-    # Sotib olinmagan bo'lsa — bu bo'lim uchun to'lov so'ra
-    if not await has_attestation(tid, "attestation"):
+    # Har bo'lim alohida tekshiriladi
+    bolim_key = f"bolim_{bolim_num}"
+    if not await has_attestation(tid, bolim_key):
         await safe_edit(callback,
             f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
             f"📋 35 ta savol | Bir martalik to'lov\n"
             f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>\n\n"
-            f"To'lov qilganingizdan so'ng <b>barcha 10 bo'lim</b> ochiladi.",
+            f"To'lov qilganingizdan so'ng faqat <b>{bolim_num}-bo'lim</b> ochiladi.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text=f"💳 Sotib olish — {config.PRICE_ATTESTATION:,} so'm",
-                    callback_data="buy:attestation"
+                    callback_data=f"buy:attest_bolim:{bolim_num}"
                 )],
                 [InlineKeyboardButton(
                     text="🔙 Orqaga",
