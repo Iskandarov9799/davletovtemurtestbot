@@ -50,35 +50,38 @@ def questions_to_miniapp(questions):
     } for q in questions]
 
 async def resolve_image_urls(q_list: list, bot) -> list:
+    """
+    file_id → VPS URL ga aylantirish.
+    Agar IMAGES_DIR va IMAGES_URL sozlangan bo'lsa — VPS ga yuklanadi.
+    Aks holda Telegram API URL ishlatiladi (muvaqqat, ~1 soat).
+    """
     result = []
     for q in q_list:
         img = q.get("img", "")
         if not img:
             result.append(q); continue
         if img.startswith("http"):
-            result.append(q); continue
-        # Cloudinary sozlanganmi?
-        if (getattr(config, 'CLOUDINARY_CLOUD_NAME', '') and
-            getattr(config, 'CLOUDINARY_API_KEY', '') and
-            getattr(config, 'CLOUDINARY_API_SECRET', '')):
-            try:
-                url = await upload_to_cloudinary(img, bot, config)
-                q = {**q, "img": url}
-            except Exception as e:
-                logger.warning(f"Cloudinary xato: {e}, Telegram URL ishlatiladi")
-                try:
-                    file = await bot.get_file(img)
-                    url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
-                    q = {**q, "img": url}
-                except Exception:
-                    q = {**q, "img": ""}
-        else:
-            try:
-                file = await bot.get_file(img)
-                url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
-                q = {**q, "img": url}
-            except Exception:
-                q = {**q, "img": ""}
+            result.append(q); continue  # allaqachon URL
+
+        # VPS ga saqlangan faylni tekshirish
+        images_url = getattr(config, 'IMAGES_URL', '')
+        images_dir = getattr(config, 'IMAGES_DIR', '')
+        if images_url and images_dir:
+            # Fayl VPS da bor-yo'qligini tekshirish
+            import hashlib
+            fname = hashlib.md5(img.encode()).hexdigest() + ".jpg"
+            fpath = os.path.join(images_dir, fname)
+            if os.path.exists(fpath):
+                q = {**q, "img": f"{images_url.rstrip('/')}/{fname}"}
+                result.append(q); continue
+
+        # Telegram API URL (muvaqqat)
+        try:
+            file = await bot.get_file(img)
+            url  = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
+            q    = {**q, "img": url}
+        except Exception:
+            q = {**q, "img": ""}
         result.append(q)
     return result
 

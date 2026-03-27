@@ -194,7 +194,11 @@ function renderQuestion(i) {
   const badgeEl = document.getElementById('question-badge') || document.getElementById('qnum');
   if (badgeEl) badgeEl.textContent = `SAVOL ${i + 1}`;
   const textEl = document.getElementById('question-text') || document.getElementById('qtxt');
-  if (textEl) textEl.textContent = q.t || q.question_text || '';
+  // Yangi qator va abzaslarni saqlab ko'rsatish
+  if (textEl) {
+    const raw = (q.t || q.question_text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    textEl.innerHTML = raw.replace(/\n/g, '<br>');
+  }
 
   // Rasm
   const imgEl  = document.getElementById('question-img') || document.getElementById('qimg');

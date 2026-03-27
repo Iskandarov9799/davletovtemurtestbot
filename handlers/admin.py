@@ -1,4 +1,7 @@
 import io
+import os
+import hashlib
+import aiohttp
 import openpyxl
 from aiogram import Router, F, Bot
 from aiogram.types import Message, BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -1616,11 +1619,11 @@ async def excel_import_upload(message: Message):
                 subcategory    = str(row[2] or '').strip() or None
                 is_attestation = str(row[3] or '').strip().upper() == 'TRUE'
                 order_num      = int(row[4]) if row[4] else None
-                question_text  = str(row[5] or '').strip()
-                option_a       = str(row[6] or '').strip() or None
-                option_b       = str(row[7] or '').strip() or None
-                option_c       = str(row[8] or '').strip() or None
-                option_d       = str(row[9] or '').strip() or None
+                question_text  = str(row[5] or '').strip('\r\n \t') if row[5] else ''
+                option_a       = str(row[6] or '').strip('\r\n \t') or None
+                option_b       = str(row[7] or '').strip('\r\n \t') or None
+                option_c       = str(row[8] or '').strip('\r\n \t') or None
+                option_d       = str(row[9] or '').strip('\r\n \t') or None
                 correct        = str(row[10] or '').strip().upper() or None
                 question_type  = str(row[11] or 'choice').strip().lower() or 'choice'
                 written_parts  = int(row[12]) if row[12] else 1
@@ -1633,11 +1636,11 @@ async def excel_import_upload(message: Message):
                 subcategory    = str(row[2] or '').strip() or None
                 is_attestation = str(row[3] or '').strip().upper() == 'TRUE'
                 order_num      = int(row[4]) if row[4] else None
-                question_text  = str(row[5] or '').strip()
-                option_a       = str(row[6] or '').strip() or None
-                option_b       = str(row[7] or '').strip() or None
-                option_c       = str(row[8] or '').strip() or None
-                option_d       = str(row[9] or '').strip() or None
+                question_text  = str(row[5] or '').strip('\r\n \t') if row[5] else ''
+                option_a       = str(row[6] or '').strip('\r\n \t') or None
+                option_b       = str(row[7] or '').strip('\r\n \t') or None
+                option_c       = str(row[8] or '').strip('\r\n \t') or None
+                option_d       = str(row[9] or '').strip('\r\n \t') or None
                 correct        = str(row[10] or '').strip().upper() or None
                 question_type  = 'choice'
                 written_parts  = 1
