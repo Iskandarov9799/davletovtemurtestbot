@@ -151,7 +151,13 @@ async def check_not_photo(message: Message):
 @router.callback_query(F.data == "payment:cancel")
 async def payment_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Bekor qilindi.", reply_markup=main_menu_keyboard())
+    # edit_text faqat InlineKeyboardMarkup qabul qiladi
+    # Shuning uchun: avval inline olib tashlaymiz, keyin ReplyKeyboard yuboramiz
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer("❌ Bekor qilindi.", reply_markup=main_menu_keyboard())
     await callback.answer()
 
 
