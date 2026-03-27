@@ -8,7 +8,7 @@ from database.db import (
     get_all_users, get_full_stats, add_question, get_all_questions,
     count_questions, delete_all_questions, delete_questions_by_filter,
     get_user_tariff, admin_grant_subscription, admin_revoke_subscription,
-    grant_attestation
+    grant_attestation, ban_user, unban_user
 )
 from keyboards.keyboards import (
     admin_keyboard, cancel_keyboard, main_menu_keyboard,
@@ -30,6 +30,43 @@ def is_admin(message: Message) -> bool:
 
 # ══════════════════════════════════════════════
 # FOYDALANUVCHILAR RO'YXATI
+# ══════════════════════════════════════════════
+
+# ══════════════════════════════════════════════
+# STATISTIKA
+# ══════════════════════════════════════════════
+
+@router.message(F.text == "📊 Statistika")
+async def admin_stats(message: Message):
+    if message.from_user.id not in config.ADMIN_IDS:
+        return
+    s = await get_full_stats()
+    await message.answer(
+        f"📊 <b>Statistika</b>\n\n"
+        f"👥 Jami foydalanuvchi: <b>{s['total_users']}</b>\n"
+        f"✅ Ro'yxatdan o'tgan: <b>{s['registered']}</b>\n\n"
+        f"💳 <b>To'lovlar:</b>\n"
+        f"⏳ Kutayotgan: <b>{s['pending']}</b>\n"
+        f"✅ Tasdiqlangan: <b>{s['confirmed_purchases']}</b>\n\n"
+        f"📅 <b>Faol obunalar:</b>\n"
+        f"Kunlik: <b>{s['active_daily']}</b>  |  "
+        f"Oylik: <b>{s['active_monthly']}</b>\n\n"
+        f"📝 <b>Testlar:</b>\n"
+        f"Jami: <b>{s['total_tests']}</b>  |  "
+        f"Bugun: <b>{s['today_tests']}</b>\n"
+        f"📈 O'rtacha ball: <b>{s['avg_score']}%</b>\n\n"
+        f"❓ <b>Savollar:</b>\n"
+        f"Jami: <b>{s['total_questions']}</b>\n"
+        f"📚 Ona tili: <b>{s['onatili_q']}</b>\n"
+        f"📖 Adabiyot: <b>{s['adabiyot_q']}</b>\n"
+        f"🎓 Attestatsiya: <b>{s['attestation_q']}</b>\n"
+        f"🏅 Milliy: <b>{s['milliy_q']}</b>",
+        parse_mode="HTML"
+    )
+
+
+# ══════════════════════════════════════════════
+# FOYDALANUVCHILAR
 # ══════════════════════════════════════════════
 
 @router.message(F.text == "👥 Foydalanuvchilar")
@@ -1152,6 +1189,7 @@ async def members_search_result(message: Message, state: FSMContext):
                 InlineKeyboardButton(text="🎓 Attestatsiya", callback_data=f"tariff:attestation:{found.telegram_id}"),
             ],
             [InlineKeyboardButton(text="❌ Tarifni bekor qilish", callback_data=f"tariff:revoke:{found.telegram_id}")],
+            [InlineKeyboardButton(text="🚫 Bloklash",  callback_data=f"ban:block:{found.telegram_id}")],
         ]),
         parse_mode="HTML"
     )
@@ -1187,6 +1225,51 @@ async def change_tariff(callback: CallbackQuery, bot: Bot):
         except Exception:
             pass
     await callback.answer("✅ Tarif yangilandi!")
+
+@router.callback_query(F.data.startswith("ban:"))
+async def ban_unban_user(callback: CallbackQuery, bot: Bot):
+    parts  = callback.data.split(":")
+    action = parts[1]   # block | unblock
+    tid    = int(parts[2])
+
+    if action == "block":
+        await ban_user(tid)
+        # Foydalanuvchiga xabar
+        try:
+            await bot.send_message(
+                tid,
+                "🚫 <b>Siz botdan bloklangansiz.</b>\n\nBog'lanish uchun adminga murojaat qiling.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+        await callback.message.edit_text(
+            f"🚫 <code>{tid}</code> — bloklandi.\n\n"
+            f"<a href='tg://user?id={tid}'>Foydalanuvchiga o'tish</a>\n\n"
+            f"Blokni ochish uchun:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="✅ Blokni ochish", callback_data=f"ban:unblock:{tid}")
+            ]]),
+            parse_mode="HTML"
+        )
+        await callback.answer("🚫 Bloklandi!")
+
+    elif action == "unblock":
+        await unban_user(tid)
+        try:
+            await bot.send_message(
+                tid,
+                "✅ <b>Bloklash olib tashlandi!</b>\n\nBotdan foydalanishingiz mumkin.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+        await callback.message.edit_text(
+            f"✅ <code>{tid}</code> — blok olib tashlandi.",
+            parse_mode="HTML"
+        )
+        await callback.answer("✅ Blok olib tashlandi!")
+
 
 @router.callback_query(F.data == "members:close")
 async def members_close(callback: CallbackQuery):

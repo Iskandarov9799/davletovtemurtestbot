@@ -689,6 +689,40 @@ async def delete_questions_by_filter(subject: str = None, category: str = None,
         return result.rowcount
 
 
+# ──────────────────────────────────────────────
+# BAN / UNBAN
+# ──────────────────────────────────────────────
+
+async def ban_user(telegram_id: int) -> bool:
+    """Foydalanuvchini bloklash"""
+    async with _conn.AsyncSessionLocal() as s:
+        result = await s.execute(
+            update(User)
+            .where(User.telegram_id == telegram_id)
+            .values(is_banned=True)
+        )
+        await s.commit()
+        return result.rowcount > 0
+
+
+async def unban_user(telegram_id: int) -> bool:
+    """Foydalanuvchi blokini ochish"""
+    async with _conn.AsyncSessionLocal() as s:
+        result = await s.execute(
+            update(User)
+            .where(User.telegram_id == telegram_id)
+            .values(is_banned=False)
+        )
+        await s.commit()
+        return result.rowcount > 0
+
+
+async def is_banned(telegram_id: int) -> bool:
+    """Foydalanuvchi bloklangan yoki yo'q"""
+    user = await get_user(telegram_id)
+    return bool(user and getattr(user, 'is_banned', False))
+
+
 async def delete_all_questions() -> int:
     async with _conn.AsyncSessionLocal() as s:
         result = await s.execute(delete(Question))

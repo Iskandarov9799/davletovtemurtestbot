@@ -22,7 +22,8 @@ class User(Base):
     full_name     = Column(String(255))
     username      = Column(String(100))
     is_registered = Column(Boolean, default=False)
-    registered_at = Column(DateTime(timezone=True), default=_now)
+    is_banned      = Column(Boolean, default=False)
+    registered_at  = Column(DateTime(timezone=True), default=_now)
 
 
 class Purchase(Base):

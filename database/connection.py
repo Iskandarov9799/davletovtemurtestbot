@@ -67,6 +67,7 @@ async def _auto_migrate(engine):
 
         # 1. Yangi ustunlar qo'shish
         new_columns = [
+            ("users",      "is_banned",      "BOOLEAN DEFAULT FALSE"),
             ("purchases",  "is_used",        "BOOLEAN DEFAULT FALSE"),
             ("questions",  "question_type",  "VARCHAR(20) DEFAULT 'choice'"),
             ("questions",  "written_parts",  "INTEGER DEFAULT 1"),

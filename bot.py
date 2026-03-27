@@ -10,7 +10,7 @@ from config import config
 
 
 class PrivateChatMiddleware(BaseMiddleware):
-    """Faqat private chat da ishlaydi. Guruh/kanal xabarlarini o'tkazib yuboradi."""
+    """Faqat private chat da ishlaydi. Guruh/kanal va ban xabarlarini o'tkazib yuboradi."""
 
     async def __call__(
         self,
@@ -20,14 +20,23 @@ class PrivateChatMiddleware(BaseMiddleware):
     ) -> Any:
         # Message tekshirish
         if isinstance(event, Message):
-            # web_app_data private dan keladi — har doim o'tkazamiz
             if event.web_app_data:
                 return await handler(event, data)
             if event.chat.type != "private":
                 return  # guruh/kanal — jim o'tamiz
+            # Ban tekshiruvi
+            from database.db import is_banned
+            if await is_banned(event.from_user.id):
+                await event.answer("🚫 Siz botdan bloklangansiz. Admin bilan bog'laning.")
+                return
         # CallbackQuery tekshirish
         elif isinstance(event, CallbackQuery):
             if event.message and event.message.chat.type != "private":
+                return
+            # Ban tekshiruvi
+            from database.db import is_banned
+            if await is_banned(event.from_user.id):
+                await event.answer("🚫 Bloklangansiz.", show_alert=True)
                 return
         return await handler(event, data)
 
