@@ -462,6 +462,16 @@ function showResult() {
   }
 
   // style.css elementlari
+  // Foydalanuvchi ismi — Telegram dan
+  const userEl = document.getElementById('result-user');
+  if (userEl) {
+    const u = tg?.initDataUnsafe?.user;
+    if (u) {
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+      userEl.textContent = '👤 ' + name;
+    }
+  }
+
   const emojiEl = document.getElementById('result-emoji') || document.getElementById('r-emoji');
   const gradeEl = document.getElementById('result-grade') || document.getElementById('r-grade');
   const scoreEl = document.getElementById('result-score') || document.getElementById('r-score');

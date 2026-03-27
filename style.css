@@ -220,6 +220,14 @@ body {
   align-items: center;
 }
 .result-top   { text-align: center; margin-bottom: 20px; width: 100%; }
+.result-user {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted2);
+  margin-bottom: 6px;
+  letter-spacing: 0.3px;
+}
+
 .result-emoji { font-size: 56px; margin-bottom: 8px; }
 .result-grade { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
 .result-score {
