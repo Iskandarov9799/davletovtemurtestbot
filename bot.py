@@ -1,10 +1,35 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, BaseMiddleware
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import TelegramObject, Message, CallbackQuery
+from typing import Callable, Awaitable, Any, Dict
 from config import config
+
+
+class PrivateChatMiddleware(BaseMiddleware):
+    """Faqat private chat da ishlaydi. Guruh/kanal xabarlarini o'tkazib yuboradi."""
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        # Message tekshirish
+        if isinstance(event, Message):
+            # web_app_data private dan keladi — har doim o'tkazamiz
+            if event.web_app_data:
+                return await handler(event, data)
+            if event.chat.type != "private":
+                return  # guruh/kanal — jim o'tamiz
+        # CallbackQuery tekshirish
+        elif isinstance(event, CallbackQuery):
+            if event.message and event.message.chat.type != "private":
+                return
+        return await handler(event, data)
 
 logging.basicConfig(
     level  = logging.INFO,
@@ -25,6 +50,10 @@ async def main():
         default = DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
     dp = Dispatcher(storage=MemoryStorage())
+
+    # Faqat private chat — guruh xabarlarini e'tiborsiz qoldirish
+    dp.message.middleware(PrivateChatMiddleware())
+    dp.callback_query.middleware(PrivateChatMiddleware())
 
     from handlers import registration, payment, test_handler, admin, question_editor
     from handlers import miniapp_handler
