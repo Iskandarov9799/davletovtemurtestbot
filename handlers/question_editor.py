@@ -203,11 +203,22 @@ async def turn_page(callback: CallbackQuery):
         )
         total = await count_questions(subject=subject, category=category)
 
-    await callback.message.edit_text(
-        f"📋 <b>Savollar</b> — jami <b>{total}</b> ta\n\nSavolni bosib ko'ring:",
-        reply_markup = page_keyboard(page_qs, page, total, prefix),
-        parse_mode   = "HTML"
-    )
+    text = f"📋 <b>Savollar</b> — jami <b>{total}</b> ta\n\nSavolni bosib ko'ring:"
+    kb   = page_keyboard(page_qs, page, total, prefix)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        # Oldingi xabar rasm bo'lsa — o'chirib yangi yuborish
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.bot.send_message(
+            chat_id      = callback.from_user.id,
+            text         = text,
+            reply_markup = kb,
+            parse_mode   = "HTML"
+        )
     await callback.answer()
 
 

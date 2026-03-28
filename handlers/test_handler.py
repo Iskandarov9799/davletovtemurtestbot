@@ -1,4 +1,4 @@
-import json, base64, zlib, logging
+import json, base64, zlib, logging, os, hashlib
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
@@ -48,6 +48,85 @@ def questions_to_miniapp(questions):
         "kw1":   getattr(q, 'keywords_1', None) or "",
         "kw2":   getattr(q, 'keywords_2', None) or "",
     } for q in questions]
+
+
+# ══════════════════════════════════════════════
+# PDF GENERATSIYA
+# ══════════════════════════════════════════════
+
+def _generate_pdf(questions: list, bolim_num: int, subject: str = "attestation") -> bytes:
+    """Attestatsiya savollaridan PDF yaratish"""
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    FONT_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+    FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+    try:
+        pdfmetrics.registerFont(TTFont('DejaVu',      FONT_PATH))
+        pdfmetrics.registerFont(TTFont('DejaVu-Bold', FONT_BOLD))
+        fn  = 'DejaVu'
+        fnb = 'DejaVu-Bold'
+    except Exception:
+        fn = fnb = 'Helvetica'
+
+    SUBJ_LABELS = {
+        'attestation': 'Ona tili va Adabiyot',
+        'jahon':       'Jahon tarixi',
+        'ozbekiston':  "O'zbekiston tarixi",
+    }
+    subj_label = SUBJ_LABELS.get(subject, 'Attestatsiya')
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+        leftMargin=2*cm, rightMargin=2*cm,
+        topMargin=2*cm, bottomMargin=2*cm)
+
+    s_title  = ParagraphStyle('title',  fontName=fnb, fontSize=15, leading=20,
+                               alignment=1, spaceAfter=4)
+    s_sub    = ParagraphStyle('sub',    fontName=fn,  fontSize=10, leading=14,
+                               alignment=1, textColor=colors.grey, spaceAfter=6)
+    s_qnum   = ParagraphStyle('qnum',   fontName=fnb, fontSize=11, leading=16,
+                               spaceBefore=10, spaceAfter=2)
+    s_qtext  = ParagraphStyle('qtext',  fontName=fnb, fontSize=11, leading=16,
+                               spaceAfter=5, wordWrap='CJK')
+    s_opt    = ParagraphStyle('opt',    fontName=fn,  fontSize=10, leading=15,
+                               leftIndent=14, spaceAfter=2, wordWrap='CJK')
+    s_footer = ParagraphStyle('footer', fontName=fn,  fontSize=8,  leading=12,
+                               alignment=1, textColor=colors.grey)
+
+    def esc(t):
+        return (t or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br/>')
+
+    story = [
+        Paragraph(f"🎓 {subj_label}", s_title),
+        Paragraph(f"Attestatsiya — {bolim_num}-bo'lim  |  {len(questions)} ta savol", s_sub),
+        HRFlowable(width="100%", thickness=1, color=colors.HexColor('#1F4E79'), spaceAfter=10),
+    ]
+
+    for i, q in enumerate(questions, 1):
+        q_text = esc(q.get('t') or q.get('question_text') or '')
+        story.append(Paragraph(f"<b>{i}.</b> {q_text}", s_qtext))
+        for ltr, key in [('A','a'),('B','b'),('C','c'),('D','d')]:
+            val = q.get(key) or q.get(f'option_{key.lower()}') or ''
+            if val:
+                story.append(Paragraph(f"<b>{ltr})</b> {esc(val)}", s_opt))
+        if i < len(questions):
+            story.append(Spacer(1, 0.25*cm))
+
+    story += [
+        Spacer(1, 0.5*cm),
+        HRFlowable(width="100%", thickness=0.5, color=colors.grey, spaceAfter=4),
+        Paragraph("Bu test Telegram bot orqali avtomatik yaratilgan.", s_footer),
+    ]
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
 
 async def resolve_image_urls(q_list: list, bot) -> list:
     """
@@ -294,13 +373,24 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
     encoded = encode_questions(q_list, meta)
     url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
 
+    # Mini App + PDF keyboard
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text  = f"🚀 {bolim_num}-bo'lim testini boshlash",
+            web_app = WebAppInfo(url=url)
+        )],
+        [InlineKeyboardButton(
+            text          = "📄 PDF yuklab olish",
+            callback_data = f"attest:pdf:{bolim_num}:attestation"
+        )],
+    ])
+
     text = (
         f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
         f"📊 Savollar: <b>{len(questions)} ta</b>\n"
         f"🔒 Tartib bo'yicha\n\n"
-        f"Quyidagi tugmani bosib testni boshlang 👇"
+        f"Testni boshlang yoki PDF yuklab oling 👇"
     )
-    kb = test_link_keyboard(url, f"🚀 {bolim_num}-bo'lim testini boshlash")
 
     if is_callback:
         await safe_edit(message_or_callback, text, reply_markup=kb)
@@ -551,5 +641,47 @@ async def attestation_bolim(callback: CallbackQuery):
         return
 
     await _launch_attestation_bolim(callback, tid, bolim_num, is_callback=True)
+
+
+@router.callback_query(F.data.startswith("attest:pdf:"))
+async def attestation_pdf(callback: CallbackQuery):
+    """Attestatsiya savollarini PDF sifatida yuborish"""
+    parts     = callback.data.split(":")
+    bolim_num = int(parts[2])
+    subject   = parts[3] if len(parts) > 3 else "attestation"
+    bolim_key = f"bolim_{bolim_num}"
+
+    await callback.answer("⏳ PDF tayyorlanmoqda...")
+
+    questions = await get_questions(
+        subject=subject, category="attestation",
+        subcategory=bolim_key, is_attestation=True,
+        count=config.ATTESTATION_COUNT
+    )
+    if not questions:
+        await callback.answer("❌ Savollar topilmadi!", show_alert=True)
+        return
+
+    try:
+        q_list   = questions_to_miniapp(questions)
+        pdf_data = _generate_pdf(q_list, bolim_num, subject)
+
+        from aiogram.types import BufferedInputFile
+        SUBJ_SHORT = {'attestation': 'attestatsiya', 'jahon': 'jahon', 'ozbekiston': 'ozbekiston'}
+        fname = f"{SUBJ_SHORT.get(subject, subject)}_{bolim_num}_bolim.pdf"
+
+        await callback.message.answer_document(
+            document = BufferedInputFile(pdf_data, filename=fname),
+            caption  = (
+                f"📄 <b>Attestatsiya — {bolim_num}-bo'lim</b>\n"
+                f"📊 {len(questions)} ta savol\n\n"
+                f"✅ Javoblar testni bajarganingizdan so'ng Mini App da ko'rinadi."
+            ),
+            parse_mode = "HTML"
+        )
+    except Exception as e:
+        logger.error(f"PDF xato: {e}")
+        await callback.message.answer(f"❌ PDF yaratishda xato: {e}")
+
 
 # web_app_data handler miniapp_handler.py da
