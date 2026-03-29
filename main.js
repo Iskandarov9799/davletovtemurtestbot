@@ -466,8 +466,8 @@ function showResult() {
   let emoji, grade;
   if (meta.is_attestation || meta.subject === 'attestation' || meta.subject === 'milliy') {
     // Attestatsiya baho tizimi
-    if      (pct >= 86) { emoji = '🏆'; grade = 'Oliy + 70% ustama'; }
-    else if (pct >= 80) { emoji = '🥇'; grade = 'Oliy'; }
+    if      (pct >= 86) { emoji = '🏆'; grade = '70% ustama'; }
+    else if (pct >= 80) { emoji = '🥇'; grade = 'Oliy toifa'; }
     else if (pct >= 70) { emoji = '🥈'; grade = '1-toifa'; }
     else if (pct >= 60) { emoji = '🥉'; grade = '2-toifa'; }
     else                { emoji = '📋'; grade = 'Mutaxassis'; }
