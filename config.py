@@ -24,6 +24,7 @@ class Config:
     IMAGES_DIR:  str = field(default_factory=lambda: os.getenv("IMAGES_DIR",  "/var/www/bot_images"))
     IMAGES_URL:  str = field(default_factory=lambda: os.getenv("IMAGES_URL",  "https://images.eskiz.uz"))
 
+    PRICE_MILLIY:     int = field(default_factory=lambda: int(os.getenv('PRICE_MILLIY', '50000')))
     PRICE_DAILY:       int = 10_000   # Kunlik — 10,000 so'm
     PRICE_MONTHLY:     int = 100_000  # Oylik — 100,000 so'm
     PRICE_ATTESTATION: int = 5_000    # Attestatsiya — bir martalik 5,000 so'm

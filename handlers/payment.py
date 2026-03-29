@@ -30,10 +30,12 @@ router = Router()
 PRODUCT_PRICES = {
     'daily':   config.PRICE_DAILY,
     'monthly': config.PRICE_MONTHLY,
+    'milliy':  getattr(config, 'PRICE_MILLIY', 50_000),
 }
 PRODUCT_LABELS = {
     'daily':   f"Kunlik — {config.PRICE_DAILY:,} so'm",
     'monthly': f"Oylik — {config.PRICE_MONTHLY:,} so'm",
+    'milliy':  f"Milliy sertifikat — {getattr(config, 'PRICE_MILLIY', 50_000):,} so'm",
 }
 
 # ── TO'LOV BOSHLASH ────────────────────────────────

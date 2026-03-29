@@ -50,6 +50,78 @@ def questions_to_miniapp(questions):
     } for q in questions]
 
 
+def make_test_keyboard(url: str) -> InlineKeyboardMarkup:
+    """Mini App testini ochuvchi tugma."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text    = "🚀 Testni boshlash",
+            web_app = WebAppInfo(url=url)
+        )],
+    ])
+
+
+async def safe_edit(callback: CallbackQuery, text: str,
+                    reply_markup=None) -> None:
+    """Xavfsiz inline-xabar tahrirlash — TelegramBadRequest ni e'tiborsiz qoldiradi."""
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup = reply_markup,
+            parse_mode   = "HTML"
+        )
+    except Exception:
+        pass
+
+
+async def send_miniapp(callback: CallbackQuery, subject: str,
+                       category: str, subcategory: str = None) -> None:
+    """Mini App ga yo'naltiruvchi universal funksiya."""
+    from keyboards.keyboards import payment_options_keyboard
+    tid = callback.from_user.id
+
+    # Kirish huquqini tekshirish
+    access_key = make_access_key(subject, category, subcategory)
+    status = await get_access_status(tid, access_key)
+
+    if status == 'buy':
+        await safe_edit(
+            callback,
+            "🔒 <b>Bu bo'limga kirish uchun obuna kerak.</b>\n\nTo'lov turini tanlang:",
+            reply_markup=payment_options_keyboard(access_key)
+        )
+        await callback.answer()
+        return
+
+    if status == 'free':
+        await mark_free_used(tid, access_key)
+
+    questions = await get_questions(
+        subject=subject, category=category,
+        subcategory=subcategory,
+        count=config.MAX_QUESTIONS
+    )
+    if not questions:
+        await callback.answer("❌ Savollar topilmadi!", show_alert=True)
+        return
+
+    meta = {
+        "subject":    subject,
+        "category":   category,
+        "subcategory": subcategory,
+        "solution_url": config.SOLUTION_URL,
+    }
+    q_list  = questions_to_miniapp(questions)
+    q_list  = await resolve_image_urls(q_list, callback.bot)
+    encoded = encode_questions(q_list, meta)
+    url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
+
+    await safe_edit(
+        callback,
+        f"📊 <b>Savollar: {len(questions)} ta</b>\n\nTestni boshlash uchun tugmani bosing 👇",
+        reply_markup=make_test_keyboard(url)
+    )
+    await callback.answer()
+
 
 # ══════════════════════════════════════════════
 
@@ -468,3 +540,83 @@ async def attestation_pdf(callback: CallbackQuery):
 
 
 # web_app_data handler miniapp_handler.py da
+
+# ══════════════════════════════════════════════
+# PDF GENERATOR
+# ══════════════════════════════════════════════
+
+def _generate_pdf(q_list: list, bolim_num: int, subject: str) -> bytes:
+    """Savollar ro'yxatidan PDF bayt generatsiyasi (reportlab)."""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        import io
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buf, pagesize=A4,
+            leftMargin=2*cm, rightMargin=2*cm,
+            topMargin=2*cm, bottomMargin=2*cm
+        )
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'MyTitle', parent=styles['Heading1'],
+            fontSize=14, spaceAfter=12
+        )
+        q_style = ParagraphStyle(
+            'Q', parent=styles['Normal'],
+            fontSize=10, spaceBefore=10, spaceAfter=4, fontName='Helvetica-Bold'
+        )
+        opt_style = ParagraphStyle(
+            'Opt', parent=styles['Normal'],
+            fontSize=9, leftIndent=16, spaceAfter=2
+        )
+        correct_style = ParagraphStyle(
+            'Cor', parent=styles['Normal'],
+            fontSize=9, leftIndent=16, spaceAfter=2,
+            textColor=colors.HexColor('#27ae60')
+        )
+        SUBJ_LABELS = {
+            'attestation': 'Attestatsiya', 'jahon': 'Jahon tarixi',
+            'ozbekiston': "O'zbekiston tarixi", 'onatili': 'Ona tili',
+        }
+        subj = SUBJ_LABELS.get(subject, subject)
+        story = [
+            Paragraph(f"{subj} - {bolim_num}-bo'lim", title_style),
+            Paragraph(f"Jami: {len(q_list)} ta savol", styles['Normal']),
+            Spacer(1, 0.4*cm),
+        ]
+        OPT_KEYS = [('A', 'a'), ('B', 'b'), ('C', 'c'), ('D', 'd')]
+        for i, q in enumerate(q_list, 1):
+            text = (q.get('t') or '').replace('<', '&lt;').replace('>', '&gt;')
+            story.append(Paragraph(f"{i}. {text}", q_style))
+            correct = (q.get('ok') or '').upper()
+            for label, key in OPT_KEYS:
+                val = (q.get(key) or '').replace('<', '&lt;').replace('>', '&gt;')
+                if not val:
+                    continue
+                if label == correct:
+                    story.append(Paragraph(f"+ {label}) {val}", correct_style))
+                else:
+                    story.append(Paragraph(f"   {label}) {val}", opt_style))
+            story.append(Spacer(1, 0.2*cm))
+        doc.build(story)
+        return buf.getvalue()
+    except ImportError:
+        import io
+        buf = io.BytesIO()
+        header = f"Attestatsiya - {bolim_num}-bolim\n\n"
+        buf.write(header.encode('utf-8'))
+        for i, q in enumerate(q_list, 1):
+            line = f"{i}. {q.get('t','')}\n"
+            buf.write(line.encode('utf-8'))
+            for label, key in [('A','a'),('B','b'),('C','c'),('D','d')]:
+                val = q.get(key, '')
+                if val:
+                    mark = '* ' if label == (q.get('ok') or '').upper() else '  '
+                    buf.write(f"   {mark}{label}) {val}\n".encode('utf-8'))
+            buf.write(b'\n')
+        return buf.getvalue()

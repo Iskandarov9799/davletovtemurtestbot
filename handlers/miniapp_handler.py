@@ -88,23 +88,9 @@ async def receive_miniapp_data(message: Message, bot: Bot):
     }
     subj_label = SUBJ_LABELS.get(subject, subject)
 
-    if is_attestation or subject in ('attestation', 'milliy'):
-        # Attestatsiya baho tizimi
-        grade_label, grade_emoji = _attestation_grade(pct)
-        if pct >= 86:
-            grade_line = f"🏆 <b>Daraja: {grade_label}</b>"
-        else:
-            grade_line = f"{grade_emoji} <b>Daraja: {grade_label}</b>"
-        encouragement = "🌟 Ajoyib natija!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
-        standard_grade_line = ""
-    else:
-        # Oddiy test bahosi (5 balli)
-        # Oddiy testlar uchun ham attestatsiya tizimi ishlatiladi
-        grade, gemoji = _attestation_grade(pct)
-        grade_line = f"{gemoji} <b>Daraja: {grade}</b>"
-        encouragement = "🌟 Ajoyib natija!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
-        grade_emoji = gemoji
-        standard_grade_line = grade_line
+    # grade_label va grade_emoji — har ikkala blokda ham mavjud bo'lsin
+    grade_label, grade_emoji = _attestation_grade(pct)
+    encouragement = "🌟 Ajoyib natija!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
 
     # ── Kategoriya nomi ─────────────────────────
     # subcategory chiroyli nom: bolim_1 → 1-bo'lim
@@ -147,8 +133,9 @@ async def receive_miniapp_data(message: Message, bot: Bot):
         logger.warning("⚠️ RESULT_GROUP_ID .env da yo'q — guruhga yuborilmadi")
 
     # ── DB ga saqlash ────────────────────────────
+    attempt_num = 1  # fallback
     try:
-        await save_test_result(
+        _result = await save_test_result(
             telegram_id    = user_id,
             subject        = subject,
             category       = category,
@@ -159,6 +146,7 @@ async def receive_miniapp_data(message: Message, bot: Bot):
             skipped        = skipped,
             is_attestation = is_attestation,
         )
+        # save_test_result score qaytaradi; attempt_num ni alohida hisoblaymiz
         logger.info(f"✅ DB ga saqlandi: user={user_id}")
     except Exception as e:
         logger.error(f"❌ save_test_result xato: {e!r}")
@@ -177,37 +165,21 @@ async def receive_miniapp_data(message: Message, bot: Bot):
 
     # ── Foydalanuvchiga natija (tepada ism) ──────
     try:
-        if is_attestation or subject in ('attestation', 'milliy'):
-            grade_label, grade_emoji = _attestation_grade(pct)
-            result_text = (
-                f"👤 <b>{full_name}</b>\n"
-                f"━━━━━━━━━━━━━\n"
-                f"📌 {subj_label}{cat_label}\n"
-                f"━━━━━━━━━━━━━\n"
-                f"✅ To'g'ri:     <b>{correct}/{total}</b>\n"
-                f"❌ Xato:        <b>{wrong}/{total}</b>\n"
-                f"⏭ O'tkazildi: <b>{skipped}</b>\n"
-                f"📈 Ball:        <b>{pct:.0f}%</b>\n"
-                f"━━━━━━━━━━━━━\n"
-                f"{grade_emoji} <b>Daraja: {grade_label}</b>\n"
-                f"━━━━━━━━━━━━━\n\n"
-                f"{encouragement}\n"
-        f"📊 {attempt_num}-urinish"
-            )
-        else:
-            result_text = (
-                f"👤 <b>{full_name}</b>\n"
-                f"━━━━━━━━━━━━━\n"
-                f"📌 {subj_label}{cat_label}\n"
-                f"━━━━━━━━━━━━━\n"
-                f"✅ To'g'ri:     <b>{correct}/{total}</b>\n"
-                f"❌ Xato:        <b>{wrong}/{total}</b>\n"
-                f"⏭ O'tkazildi: <b>{skipped}</b>\n"
-                f"📈 Ball:        <b>{pct:.0f}%</b>\n"
-                f"🎓 Baho:        <b>{grade}</b>\n"
-                f"━━━━━━━━━━━━━\n\n"
-                f"{encouragement}"
-            )
+        result_text = (
+            f"👤 <b>{full_name}</b>\n"
+            f"━━━━━━━━━━━━━\n"
+            f"📌 {subj_label}{cat_label}\n"
+            f"━━━━━━━━━━━━━\n"
+            f"✅ To'g'ri:     <b>{correct}/{total}</b>\n"
+            f"❌ Xato:        <b>{wrong}/{total}</b>\n"
+            f"⏭ O'tkazildi: <b>{skipped}</b>\n"
+            f"📈 Ball:        <b>{pct:.0f}%</b>\n"
+            f"━━━━━━━━━━━━━\n"
+            f"{grade_emoji} <b>Daraja: {grade_label}</b>\n"
+            f"━━━━━━━━━━━━━\n\n"
+            f"{encouragement}\n"
+            f"📊 {attempt_num}-urinish"
+        )
         await message.answer(
             result_text,
             reply_markup=main_menu_keyboard(),
