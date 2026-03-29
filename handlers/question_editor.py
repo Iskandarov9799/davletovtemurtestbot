@@ -275,11 +275,21 @@ async def edit_question(callback: CallbackQuery, state: FSMContext):
     prefix = parts[4]
 
     await state.update_data(edit_qid=qid, edit_page=page, edit_prefix=prefix)
-    await callback.message.edit_text(
-        f"✏️ <b>Savol #{qid} — qaysi maydonni tahrirlaysiz?</b>",
-        reply_markup = edit_field_keyboard(qid, page, prefix),
-        parse_mode   = "HTML"
-    )
+    try:
+        await callback.message.edit_text(
+            f"✏️ <b>Savol #{qid} — qaysi maydonni tahrirlaysiz?</b>",
+            reply_markup = edit_field_keyboard(qid, page, prefix),
+            parse_mode   = "HTML"
+        )
+    except Exception:
+        try: await callback.message.delete()
+        except Exception: pass
+        await callback.bot.send_message(
+            chat_id      = callback.from_user.id,
+            text         = f"✏️ <b>Savol #{qid} — qaysi maydonni tahrirlaysiz?</b>",
+            reply_markup = edit_field_keyboard(qid, page, prefix),
+            parse_mode   = "HTML"
+        )
     await state.set_state(EditQuestionStates.edit_field)
     await callback.answer()
 
@@ -362,19 +372,27 @@ async def delete_question_confirm(callback: CallbackQuery, state: FSMContext):
     prefix = parts[4]
 
     await state.update_data(del_qid=qid, del_page=page, del_prefix=prefix)
-    await callback.message.edit_text(
+    text = (
         f"🗑 <b>Savol #{qid} ni o'chirishni tasdiqlaysizmi?</b>\n\n"
-        f"⚠️ Bu amalni qaytarib bo'lmaydi!",
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(
-                text="✅ Ha, o'chir",
-                callback_data=f"qedit:delok:{qid}:{page}:{prefix}"),
-            InlineKeyboardButton(
-                text="❌ Yo'q",
-                callback_data=f"qedit:view:{qid}:{page}:{prefix}"),
-        ]]),
-        parse_mode = "HTML"
+        f"⚠️ Bu amalni qaytarib bo'lmaydi!"
     )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="✅ Ha, o'chir",
+            callback_data=f"qedit:delok:{qid}:{page}:{prefix}"),
+        InlineKeyboardButton(
+            text="❌ Yo'q",
+            callback_data=f"qedit:view:{qid}:{page}:{prefix}"),
+    ]])
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        try: await callback.message.delete()
+        except Exception: pass
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id, text=text,
+            reply_markup=kb, parse_mode="HTML"
+        )
     await state.set_state(EditQuestionStates.confirm_delete)
     await callback.answer()
 

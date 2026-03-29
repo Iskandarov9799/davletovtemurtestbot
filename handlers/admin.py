@@ -654,7 +654,7 @@ async def reset_tariffs_execute(callback: CallbackQuery):
     count = await reset_all_subscriptions()
     await callback.message.edit_text(
         f"♻️ <b>{count} ta</b> tarif nollandi!\n\n"
-        f"Foydalanuvchilar endi qayta sotib olishlari kerak.",
+        f"Barcha foydalanuvchilar (kunlik, oylik va attestatsiya) endi qayta sotib olishlari kerak.",
         parse_mode="HTML"
     )
     await callback.message.answer("Admin panel:", reply_markup=admin_keyboard())
