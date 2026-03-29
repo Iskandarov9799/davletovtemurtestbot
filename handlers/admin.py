@@ -623,7 +623,15 @@ async def addq_correct(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "addq:cancel")
 async def addq_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Bekor qilindi.", reply_markup=admin_keyboard())
+    try:
+        await callback.message.edit_text("❌ Bekor qilindi.")
+    except Exception:
+        pass
+    await callback.bot.send_message(
+        chat_id      = callback.from_user.id,
+        text         = "Admin panel:",
+        reply_markup = admin_keyboard()
+    )
     await callback.answer()
 
 # ══════════════════════════════════════════════
