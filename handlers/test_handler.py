@@ -50,11 +50,11 @@ def questions_to_miniapp(questions):
     } for q in questions]
 
 
-def make_test_keyboard(url: str) -> InlineKeyboardMarkup:
+def make_test_keyboard(url: str, label: str = "🚀 Testni boshlash") -> InlineKeyboardMarkup:
     """Mini App testini ochuvchi tugma."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text    = "🚀 Testni boshlash",
+            text    = label,
             web_app = WebAppInfo(url=url)
         )],
     ])
@@ -76,10 +76,8 @@ async def safe_edit(callback: CallbackQuery, text: str,
 async def send_miniapp(callback: CallbackQuery, subject: str,
                        category: str, subcategory: str = None) -> None:
     """Mini App ga yo'naltiruvchi universal funksiya."""
-    from keyboards.keyboards import payment_options_keyboard
     tid = callback.from_user.id
 
-    # Kirish huquqini tekshirish
     access_key = make_access_key(subject, category, subcategory)
     status = await get_access_status(tid, access_key)
 
@@ -105,9 +103,9 @@ async def send_miniapp(callback: CallbackQuery, subject: str,
         return
 
     meta = {
-        "subject":    subject,
-        "category":   category,
-        "subcategory": subcategory,
+        "subject":      subject,
+        "category":     category,
+        "subcategory":  subcategory,
         "solution_url": config.SOLUTION_URL,
     }
     q_list  = questions_to_miniapp(questions)
@@ -125,7 +123,6 @@ async def send_miniapp(callback: CallbackQuery, subject: str,
 
 # ══════════════════════════════════════════════
 
-
 async def resolve_image_urls(q_list: list, bot) -> list:
     """
     file_id → VPS URL ga aylantirish.
@@ -138,21 +135,17 @@ async def resolve_image_urls(q_list: list, bot) -> list:
         if not img:
             result.append(q); continue
         if img.startswith("http"):
-            result.append(q); continue  # allaqachon URL
+            result.append(q); continue
 
-        # VPS ga saqlangan faylni tekshirish
         images_url = getattr(config, 'IMAGES_URL', '')
         images_dir = getattr(config, 'IMAGES_DIR', '')
         if images_url and images_dir:
-            # Fayl VPS da bor-yo'qligini tekshirish
-            import hashlib
             fname = hashlib.md5(img.encode()).hexdigest() + ".jpg"
             fpath = os.path.join(images_dir, fname)
             if os.path.exists(fpath):
                 q = {**q, "img": f"{images_url.rstrip('/')}/{fname}"}
                 result.append(q); continue
 
-        # Telegram API URL (muvaqqat)
         try:
             file = await bot.get_file(img)
             url  = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
@@ -192,9 +185,6 @@ async def attestation_menu(message: Message):
     if not await is_registered(message.from_user.id):
         await message.answer("❗ Avval ro'yxatdan o'ting — /start")
         return
-    tid = message.from_user.id
-
-    # Har bo'lim alohida to'lov — bo'limlar ko'rsatiladi
     await message.answer(
         f"🎓 <b>Atestatsiya</b>\n"
         f"📋 Har bir bo'lim — <b>{config.PRICE_ATTESTATION:,} so'm</b> (bir martalik)\n\n"
@@ -213,32 +203,24 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
         is_attestation=True, count=config.ATTESTATION_COUNT
     )
     if not questions:
-        # Bo'limda savol yo'q — umumiy savollardan olish
         questions = await get_questions(
             subject="attestation", category="attestation",
             is_attestation=True, count=config.ATTESTATION_COUNT
         )
 
     meta = {
-        "subject": "attestation", "category": "attestation",
-        "subcategory": subcategory,
-        "is_attestation": True, "solution_url": config.SOLUTION_URL
+        "subject":      "attestation",
+        "category":     "attestation",
+        "subcategory":  subcategory,
+        "is_attestation": True,
+        "solution_url": config.SOLUTION_URL
     }
     q_list  = questions_to_miniapp(questions)
-    if is_callback:
-        q_list = await resolve_image_urls(q_list, message_or_callback.bot)
-    else:
-        q_list = await resolve_image_urls(q_list, message_or_callback.bot)
-
+    q_list  = await resolve_image_urls(q_list, message_or_callback.bot)
     encoded = encode_questions(q_list, meta)
     url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text    = f"🚀 {bolim_num}-bo'lim testini boshlash",
-            web_app = WebAppInfo(url=url)
-        )],
-    ])
+    kb = make_test_keyboard(url, f"🚀 {bolim_num}-bo'lim testini boshlash")
 
     text = (
         f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
@@ -473,7 +455,6 @@ async def attestation_bolim(callback: CallbackQuery):
     bolim_num = int(callback.data.split(":")[2])
     tid       = callback.from_user.id
 
-    # Har bo'lim alohida tekshiriladi
     bolim_key = f"bolim_{bolim_num}"
     if not await has_attestation(tid, bolim_key):
         await safe_edit(callback,
@@ -497,126 +478,4 @@ async def attestation_bolim(callback: CallbackQuery):
 
     await _launch_attestation_bolim(callback, tid, bolim_num, is_callback=True)
 
-
-@router.callback_query(F.data.startswith("attest:pdf:"))
-async def attestation_pdf(callback: CallbackQuery):
-    """Attestatsiya savollarini PDF sifatida yuborish"""
-    parts     = callback.data.split(":")
-    bolim_num = int(parts[2])
-    subject   = parts[3] if len(parts) > 3 else "attestation"
-    bolim_key = f"bolim_{bolim_num}"
-
-    await callback.answer("⏳ PDF tayyorlanmoqda...")
-
-    questions = await get_questions(
-        subject=subject, category="attestation",
-        subcategory=bolim_key, is_attestation=True,
-        count=config.ATTESTATION_COUNT
-    )
-    if not questions:
-        await callback.answer("❌ Savollar topilmadi!", show_alert=True)
-        return
-
-    try:
-        q_list   = questions_to_miniapp(questions)
-        pdf_data = _generate_pdf(q_list, bolim_num, subject)
-
-        from aiogram.types import BufferedInputFile
-        SUBJ_SHORT = {'attestation': 'attestatsiya', 'jahon': 'jahon', 'ozbekiston': 'ozbekiston'}
-        fname = f"{SUBJ_SHORT.get(subject, subject)}_{bolim_num}_bolim.pdf"
-
-        await callback.message.answer_document(
-            document = BufferedInputFile(pdf_data, filename=fname),
-            caption  = (
-                f"📄 <b>Attestatsiya — {bolim_num}-bo'lim</b>\n"
-                f"📊 {len(questions)} ta savol\n\n"
-                f"✅ Javoblar testni bajarganingizdan so'ng Mini App da ko'rinadi."
-            ),
-            parse_mode = "HTML"
-        )
-    except Exception as e:
-        logger.error(f"PDF xato: {e}")
-        await callback.message.answer(f"❌ PDF yaratishda xato: {e}")
-
-
-# web_app_data handler miniapp_handler.py da
-
-# ══════════════════════════════════════════════
-# PDF GENERATOR
-# ══════════════════════════════════════════════
-
-def _generate_pdf(q_list: list, bolim_num: int, subject: str) -> bytes:
-    """Savollar ro'yxatidan PDF bayt generatsiyasi (reportlab)."""
-    try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import cm
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-        import io
-
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(
-            buf, pagesize=A4,
-            leftMargin=2*cm, rightMargin=2*cm,
-            topMargin=2*cm, bottomMargin=2*cm
-        )
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            'MyTitle', parent=styles['Heading1'],
-            fontSize=14, spaceAfter=12
-        )
-        q_style = ParagraphStyle(
-            'Q', parent=styles['Normal'],
-            fontSize=10, spaceBefore=10, spaceAfter=4, fontName='Helvetica-Bold'
-        )
-        opt_style = ParagraphStyle(
-            'Opt', parent=styles['Normal'],
-            fontSize=9, leftIndent=16, spaceAfter=2
-        )
-        correct_style = ParagraphStyle(
-            'Cor', parent=styles['Normal'],
-            fontSize=9, leftIndent=16, spaceAfter=2,
-            textColor=colors.HexColor('#27ae60')
-        )
-        SUBJ_LABELS = {
-            'attestation': 'Attestatsiya', 'jahon': 'Jahon tarixi',
-            'ozbekiston': "O'zbekiston tarixi", 'onatili': 'Ona tili',
-        }
-        subj = SUBJ_LABELS.get(subject, subject)
-        story = [
-            Paragraph(f"{subj} - {bolim_num}-bo'lim", title_style),
-            Paragraph(f"Jami: {len(q_list)} ta savol", styles['Normal']),
-            Spacer(1, 0.4*cm),
-        ]
-        OPT_KEYS = [('A', 'a'), ('B', 'b'), ('C', 'c'), ('D', 'd')]
-        for i, q in enumerate(q_list, 1):
-            text = (q.get('t') or '').replace('<', '&lt;').replace('>', '&gt;')
-            story.append(Paragraph(f"{i}. {text}", q_style))
-            correct = (q.get('ok') or '').upper()
-            for label, key in OPT_KEYS:
-                val = (q.get(key) or '').replace('<', '&lt;').replace('>', '&gt;')
-                if not val:
-                    continue
-                if label == correct:
-                    story.append(Paragraph(f"+ {label}) {val}", correct_style))
-                else:
-                    story.append(Paragraph(f"   {label}) {val}", opt_style))
-            story.append(Spacer(1, 0.2*cm))
-        doc.build(story)
-        return buf.getvalue()
-    except ImportError:
-        import io
-        buf = io.BytesIO()
-        header = f"Attestatsiya - {bolim_num}-bolim\n\n"
-        buf.write(header.encode('utf-8'))
-        for i, q in enumerate(q_list, 1):
-            line = f"{i}. {q.get('t','')}\n"
-            buf.write(line.encode('utf-8'))
-            for label, key in [('A','a'),('B','b'),('C','c'),('D','d')]:
-                val = q.get(key, '')
-                if val:
-                    mark = '* ' if label == (q.get('ok') or '').upper() else '  '
-                    buf.write(f"   {mark}{label}) {val}\n".encode('utf-8'))
-            buf.write(b'\n')
-        return buf.getvalue()
+    

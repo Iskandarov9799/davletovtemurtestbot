@@ -7,6 +7,7 @@ from database.db import (
     is_registered,
     get_user,
     save_test_result,
+    get_user_results,
     mark_wrong_question,
     mark_correct_question,
 )
@@ -88,39 +89,29 @@ async def receive_miniapp_data(message: Message, bot: Bot):
     }
     subj_label = SUBJ_LABELS.get(subject, subject)
 
-    # grade_label va grade_emoji — har ikkala blokda ham mavjud bo'lsin
     grade_label, grade_emoji = _attestation_grade(pct)
     encouragement = "🌟 Ajoyib natija!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
 
     # ── Kategoriya nomi ─────────────────────────
-    # subcategory chiroyli nom: bolim_1 → 1-bo'lim
     if subcategory and subcategory.startswith('bolim_'):
-        bolim_num  = subcategory.split('_', 1)[1]
-        cat_label  = f" › {bolim_num}-bo'lim"
+        bolim_num = subcategory.split('_', 1)[1]
+        cat_label = f" › {bolim_num}-bo'lim"
     elif subcategory:
-        cat_label  = f" › {subcategory}"
+        cat_label = f" › {subcategory}"
     elif category:
-        cat_label  = f" › {category}"
+        cat_label = f" › {category}"
     else:
-        cat_label  = ""
+        cat_label = ""
 
     # ── Guruhga yuborish ─────────────────────────
     if config.RESULT_GROUP_ID:
         try:
-            group_id = int(config.RESULT_GROUP_ID)
-            if is_attestation or subject in ('attestation', 'milliy'):
-                grade_label, grade_emoji = _attestation_grade(pct)
-                group_text = (
-                    f"{grade_emoji} <b>{full_name}</b> ({uname_link})\n"
-                    f"📌 {subj_label}{cat_label}\n"
-                    f"✅ {correct}/{total} | 📈 {pct:.0f}% | 🎓 {grade_label}"
-                )
-            else:
-                group_text = (
-                    f"{grade_emoji} <b>{full_name}</b> ({uname_link})\n"
-                    f"📌 {subj_label}{cat_label}\n"
-                    f"✅ {correct}/{total} | 📈 {pct:.0f}% | 🎓 {grade}"
-                )
+            group_id   = int(config.RESULT_GROUP_ID)
+            group_text = (
+                f"{grade_emoji} <b>{full_name}</b> ({uname_link})\n"
+                f"📌 {subj_label}{cat_label}\n"
+                f"✅ {correct}/{total} | 📈 {pct:.0f}% | 🎓 {grade_label}"
+            )
             await bot.send_message(
                 chat_id    = group_id,
                 text       = group_text,
@@ -132,10 +123,20 @@ async def receive_miniapp_data(message: Message, bot: Bot):
     else:
         logger.warning("⚠️ RESULT_GROUP_ID .env da yo'q — guruhga yuborilmadi")
 
-    # ── DB ga saqlash ────────────────────────────
-    attempt_num = 1  # fallback
+    # ── Urinish soni ─────────────────────────────
+    attempt_num = 1
     try:
-        _result = await save_test_result(
+        prev = await get_user_results(user_id, limit=200)
+        attempt_num = sum(
+            1 for r in prev
+            if r.subject == subject and r.category == category
+        ) + 1
+    except Exception as e:
+        logger.warning(f"attempt_num hisoblanmadi: {e}")
+
+    # ── DB ga saqlash ────────────────────────────
+    try:
+        await save_test_result(
             telegram_id    = user_id,
             subject        = subject,
             category       = category,
@@ -146,7 +147,6 @@ async def receive_miniapp_data(message: Message, bot: Bot):
             skipped        = skipped,
             is_attestation = is_attestation,
         )
-        # save_test_result score qaytaradi; attempt_num ni alohida hisoblaymiz
         logger.info(f"✅ DB ga saqlandi: user={user_id}")
     except Exception as e:
         logger.error(f"❌ save_test_result xato: {e!r}")
@@ -163,7 +163,7 @@ async def receive_miniapp_data(message: Message, bot: Bot):
         except Exception as e:
             logger.warning(f"mark_correct xato qid={qid}: {e}")
 
-    # ── Foydalanuvchiga natija (tepada ism) ──────
+    # ── Foydalanuvchiga natija ───────────────────
     try:
         result_text = (
             f"👤 <b>{full_name}</b>\n"
@@ -187,3 +187,5 @@ async def receive_miniapp_data(message: Message, bot: Bot):
         )
     except Exception as e:
         logger.error(f"answer xato: {e!r}")
+
+        
