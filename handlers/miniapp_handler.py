@@ -191,7 +191,8 @@ async def receive_miniapp_data(message: Message, bot: Bot):
                 f"━━━━━━━━━━━━━\n"
                 f"{grade_emoji} <b>Daraja: {grade_label}</b>\n"
                 f"━━━━━━━━━━━━━\n\n"
-                f"{encouragement}"
+                f"{encouragement}\n"
+        f"📊 {attempt_num}-urinish"
             )
         else:
             result_text = (

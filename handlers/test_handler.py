@@ -50,83 +50,9 @@ def questions_to_miniapp(questions):
     } for q in questions]
 
 
+
 # ══════════════════════════════════════════════
-# PDF GENERATSIYA
-# ══════════════════════════════════════════════
 
-def _generate_pdf(questions: list, bolim_num: int, subject: str = "attestation") -> bytes:
-    """Attestatsiya savollaridan PDF yaratish"""
-    import io
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-
-    FONT_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-    FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-    try:
-        pdfmetrics.registerFont(TTFont('DejaVu',      FONT_PATH))
-        pdfmetrics.registerFont(TTFont('DejaVu-Bold', FONT_BOLD))
-        fn  = 'DejaVu'
-        fnb = 'DejaVu-Bold'
-    except Exception:
-        fn = fnb = 'Helvetica'
-
-    SUBJ_LABELS = {
-        'attestation': 'Ona tili va Adabiyot',
-        'jahon':       'Jahon tarixi',
-        'ozbekiston':  "O'zbekiston tarixi",
-    }
-    subj_label = SUBJ_LABELS.get(subject, 'Attestatsiya')
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4,
-        leftMargin=2*cm, rightMargin=2*cm,
-        topMargin=2*cm, bottomMargin=2*cm)
-
-    s_title  = ParagraphStyle('title',  fontName=fnb, fontSize=15, leading=20,
-                               alignment=1, spaceAfter=4)
-    s_sub    = ParagraphStyle('sub',    fontName=fn,  fontSize=10, leading=14,
-                               alignment=1, textColor=colors.grey, spaceAfter=6)
-    s_qnum   = ParagraphStyle('qnum',   fontName=fnb, fontSize=11, leading=16,
-                               spaceBefore=10, spaceAfter=2)
-    s_qtext  = ParagraphStyle('qtext',  fontName=fnb, fontSize=11, leading=16,
-                               spaceAfter=5, wordWrap='CJK')
-    s_opt    = ParagraphStyle('opt',    fontName=fn,  fontSize=10, leading=15,
-                               leftIndent=14, spaceAfter=2, wordWrap='CJK')
-    s_footer = ParagraphStyle('footer', fontName=fn,  fontSize=8,  leading=12,
-                               alignment=1, textColor=colors.grey)
-
-    def esc(t):
-        return (t or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br/>')
-
-    story = [
-        Paragraph(f"🎓 {subj_label}", s_title),
-        Paragraph(f"Attestatsiya — {bolim_num}-bo'lim  |  {len(questions)} ta savol", s_sub),
-        HRFlowable(width="100%", thickness=1, color=colors.HexColor('#1F4E79'), spaceAfter=10),
-    ]
-
-    for i, q in enumerate(questions, 1):
-        q_text = esc(q.get('t') or q.get('question_text') or '')
-        story.append(Paragraph(f"<b>{i}.</b> {q_text}", s_qtext))
-        for ltr, key in [('A','a'),('B','b'),('C','c'),('D','d')]:
-            val = q.get(key) or q.get(f'option_{key.lower()}') or ''
-            if val:
-                story.append(Paragraph(f"<b>{ltr})</b> {esc(val)}", s_opt))
-        if i < len(questions):
-            story.append(Spacer(1, 0.25*cm))
-
-    story += [
-        Spacer(1, 0.5*cm),
-        HRFlowable(width="100%", thickness=0.5, color=colors.grey, spaceAfter=4),
-        Paragraph("Bu test Telegram bot orqali avtomatik yaratilgan.", s_footer),
-    ]
-    doc.build(story)
-    buf.seek(0)
-    return buf.read()
 
 async def resolve_image_urls(q_list: list, bot) -> list:
     """
@@ -163,144 +89,6 @@ async def resolve_image_urls(q_list: list, bot) -> list:
             q = {**q, "img": ""}
         result.append(q)
     return result
-
-_image_url_cache: dict = {}
-
-async def upload_to_cloudinary(file_id: str, bot, config) -> str:
-    import aiohttp, io, hashlib, hmac, time
-    if file_id in _image_url_cache:
-        return _image_url_cache[file_id]
-    file   = await bot.get_file(file_id)
-    tg_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(tg_url) as resp:
-            img_bytes = await resp.read()
-        timestamp = str(int(time.time()))
-        public_id = f"bot_imgs/{file_id[:20]}"
-        sign_str  = f"public_id={public_id}&timestamp={timestamp}"
-        signature = hmac.new(
-            config.CLOUDINARY_API_SECRET.encode(),
-            sign_str.encode(), hashlib.sha1
-        ).hexdigest()
-        form = aiohttp.FormData()
-        form.add_field('file',      img_bytes,               content_type='image/jpeg')
-        form.add_field('api_key',   config.CLOUDINARY_API_KEY)
-        form.add_field('timestamp', timestamp)
-        form.add_field('public_id', public_id)
-        form.add_field('signature', signature)
-        upload_url = f"https://api.cloudinary.com/v1_1/{config.CLOUDINARY_CLOUD_NAME}/image/upload"
-        async with session.post(upload_url, data=form) as resp:
-            data = await resp.json()
-            if 'secure_url' not in data:
-                raise Exception(f"Cloudinary javob: {data}")
-            url = data['secure_url']
-    _image_url_cache[file_id] = url
-    return url
-
-
-def test_link_keyboard(url: str, label: str = "🚀 Testni boshlash"):
-    """Test havolasini Mini App sifatida ochish"""
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))
-    ]])
-
-
-async def safe_edit(callback, text, reply_markup=None):
-    from aiogram.types import ReplyKeyboardMarkup
-    try:
-        if isinstance(reply_markup, ReplyKeyboardMarkup):
-            try:
-                await callback.message.edit_text(text, reply_markup=None, parse_mode="HTML")
-            except Exception:
-                pass
-            await callback.message.answer("👇", reply_markup=reply_markup)
-        else:
-            await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
-    except Exception as e:
-        if "message is not modified" not in str(e):
-            pass
-
-
-async def send_miniapp(callback, subject, category,
-                       subcategory=None, is_attestation=False):
-    SUBJ = {
-        'onatili':     '📚 Ona tili',
-        'adabiyot':    '📖 Adabiyot',
-        'attestation': '🎓 Attestatsiya',
-        'milliy':      '🏅 Milliy sertifikat',
-    }
-    tid = callback.from_user.id
-    bot = callback.bot
-
-    if not await is_registered(tid):
-        await safe_edit(callback,
-            "👤 <b>Ro'yxatdan o'tmagansiz!</b>\n\n/start buyrug'ini yuboring.")
-        await callback.answer()
-        return
-
-    cnt = await count_questions(subject=subject, category=category,
-                                subcategory=subcategory,
-                                is_attestation=is_attestation)
-    if cnt == 0:
-        await safe_edit(callback,
-            "📭 Bu bo'limda hozircha savollar yo'q.\n⏳ Tez orada qo'shiladi!")
-        await callback.answer()
-        return
-
-    if not is_attestation:
-        access_key = make_access_key(subject, category, subcategory)
-        status     = await get_access_status(tid, access_key)
-        if status == 'buy':
-            await safe_edit(callback,
-                "🔒 <b>Birinchi bepul urinishingizni ishlatgansiz!</b>\n\n"
-                "Davom etish uchun to'lov turini tanlang:",
-                reply_markup=payment_options_keyboard(access_key))
-            await callback.answer()
-            return
-        elif status == 'free':
-            await mark_free_used(tid, access_key)
-        # 'paid' = kunlik yoki oylik obuna faol — testni boshlash
-        # (mark_once_used kerak emas, subscription expires_at bilan boshqariladi)
-
-    questions = await get_questions(
-        subject=subject, category=category,
-        subcategory=subcategory, difficulty=None,
-        count=config.ATTESTATION_COUNT if is_attestation else min(cnt, config.MAX_QUESTIONS),
-        is_attestation=is_attestation,
-        telegram_id=tid if not is_attestation else None
-    )
-
-    meta = {
-        'subject': subject, 'category': category, 'subcategory': subcategory,
-        'is_attestation': is_attestation, 'solution_url': config.SOLUTION_URL
-    }
-    q_list  = questions_to_miniapp(questions)
-    q_list  = await resolve_image_urls(q_list, bot)
-    encoded = encode_questions(q_list, meta)
-    url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
-
-    # Chiroyli nom
-    if subcategory:
-        parts_sub = subcategory.split('_', 1)
-        if len(parts_sub) == 2:
-            grade_key, bob_key = parts_sub
-            grade_name = config.GRADES.get(grade_key, grade_key)
-            bob_name   = config.ADABIYOT_BOBLAR.get(grade_key, {}).get(bob_key, f"{bob_key}-bob")
-            sub_label  = f" › {grade_name} › {bob_name}"
-        else:
-            sub_label = f" › {config.GRADES.get(subcategory, subcategory)}"
-    else:
-        sub_label = ''
-
-    subj_text = SUBJ.get(subject, subject)
-    await safe_edit(callback,
-        f"<b>{subj_text}{sub_label}</b>\n\n"
-        f"📊 Savollar: <b>{len(questions)} ta</b>\n"
-        f"{'🔒 Tartib bo\'yicha' if is_attestation else '🎲 Random tartibda'}\n\n"
-        f"Quyidagi tugmani bosib testni boshlang 👇",
-        reply_markup=test_link_keyboard(url)
-    )
-    await callback.answer()
 
 
 # ══════════════════════════════════════════════
@@ -444,7 +232,7 @@ async def _launch_milliy_msg(message: Message, tid: int):
         f"📝 Savollar: <b>{len(questions)} ta</b>\n"
         f"(1-35 variantli, 36-44 yozma)\n\n"
         f"Quyidagi tugmani bosib testni boshlang 👇",
-        reply_markup=test_link_keyboard(url),
+        reply_markup=make_test_keyboard(url),
         parse_mode="HTML"
     )
 

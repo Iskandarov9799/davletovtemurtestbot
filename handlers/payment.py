@@ -1,9 +1,8 @@
 """
 To'lov tizimi:
-  once        — 3,500 so'm (bir martalik, bitta test)
-  daily       — 35,000 so'm (24 soat barcha testlar)
+  daily       — 10,000 so'm (24 soat barcha testlar)
   monthly     — 100,000 so'm (30 kun barcha testlar)
-  attestation — bir martalik atestatsiya
+  attestation — 5,000 so'm (bir martalik atestatsiya bo'limi)
 """
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
@@ -21,7 +20,7 @@ from keyboards.keyboards import (
 )
 from handlers.test_handler import (
     questions_to_miniapp, encode_questions,
-    resolve_image_urls, test_link_keyboard
+    resolve_image_urls, make_test_keyboard
 )
 from states import PaymentStates
 from config import config
@@ -117,11 +116,11 @@ async def receive_check(message: Message, state: FSMContext, bot: Bot):
     user = await get_user(message.from_user.id)
     uname = f"@{user.username}" if user and user.username else str(message.from_user.id)
     LABELS = {
-        'once': 'Bir martalik', 'daily': 'Kunlik',
+        'daily': 'Kunlik',
         'monthly': 'Oylik', 'attestation': 'Atestatsiya',
     }
     label    = LABELS.get(product_type, product_type)
-    key_info = f"\n🔑 Key: <code>{retry_key}</code>" if retry_key and product_type == 'once' else ""
+    key_info = f"\n🔑 Key: <code>{retry_key}</code>" if retry_key else ""
 
     for admin_id in config.ADMIN_IDS:
         try:
@@ -216,7 +215,7 @@ async def confirm_payment(callback: CallbackQuery, bot: Bot):
             await bot.send_message(
                 chat_id      = tid,
                 text         = "✅ <b>To'lovingiz tasdiqlandi!</b>\n\n🏅 Milliy sertifikat testi 👇",
-                reply_markup = test_link_keyboard(url),
+                reply_markup = make_test_keyboard(url),
                 parse_mode   = "HTML"
             )
         except Exception:
@@ -300,7 +299,7 @@ async def pending_payments(message: Message):
         return
 
     LABELS = {
-        'once': 'Bir martalik', 'daily': 'Kunlik',
+        'daily': 'Kunlik',
         'monthly': 'Oylik', 'attestation': 'Atestatsiya',
     }
     for p, user in purchases:
