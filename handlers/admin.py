@@ -647,8 +647,9 @@ async def reset_tariffs_confirm(message: Message):
     if not is_admin(message): return
     await message.answer(
         "⚠️ <b>Diqqat!</b>\n\n"
-        "Barcha foydalanuvchilarning <b>kunlik va oylik</b> tariflari bekor qilinadi.\n"
-        "Attestatsiya huquqlari saqlanib qoladi.\n\n"
+        "Barcha foydalanuvchilarning <b>kunlik, oylik va attestatsiya</b> huquqlari "
+        "to'liq bekor qilinadi.\n"
+        "Hammasi qaytadan sotib olishi kerak bo'ladi.\n\n"
         "Tasdiqlaysizmi?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="♻️ Ha, nollash", callback_data="admin:reset_tariffs"),
