@@ -28,15 +28,13 @@ from config import config
 
 router = Router()
 
-PRODUCT_LABELS = {
-    'once':    "Bir martalik — 3,500 so'm",
-    'daily':   "Kunlik — 35,000 so'm",
-    'monthly': "Oylik — 100,000 so'm",
-}
 PRODUCT_PRICES = {
-    'once':    3_500,
-    'daily':   35_000,
-    'monthly': 100_000,
+    'daily':   config.PRICE_DAILY,
+    'monthly': config.PRICE_MONTHLY,
+}
+PRODUCT_LABELS = {
+    'daily':   f"Kunlik — {config.PRICE_DAILY:,} so'm",
+    'monthly': f"Oylik — {config.PRICE_MONTHLY:,} so'm",
 }
 
 # ── TO'LOV BOSHLASH ────────────────────────────────
