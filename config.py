@@ -128,11 +128,6 @@ class Config:
         '8': '8-sinf', '9': '9-sinf', '10': '10-sinf', '11': '11-sinf',
     }
 
-    DIFFICULTIES = {
-        'easy':   '🟢 Oson',
-        'medium': "🟡 O'rta",
-        'hard':   '🔴 Qiyin',
-    }
 
     def validate(self):
         errors = []

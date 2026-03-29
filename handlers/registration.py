@@ -108,16 +108,14 @@ async def menu_results(message: Message):
         return
 
     SUBJ = {'onatili': '📚 Ona tili', 'adabiyot': '📖 Adabiyot'}
-    DIFF = {'easy': '🟢', 'medium': '🟡', 'hard': '🔴'}
 
     text = "📊 <b>So'nggi natijalaringiz:</b>\n\n"
     for i, r in enumerate(results, 1):
         subj  = SUBJ.get(r.subject, r.subject or '')
-        diff  = DIFF.get(r.difficulty, '') if r.difficulty else ''
         date  = str(r.finished_at)[:10] if r.finished_at else '—'
         sub   = f" › {r.subcategory}" if r.subcategory else ''
         text += (
-            f"{i}. {subj} {diff}\n"
+            f"{i}. {subj}\n"
             f"   📁 {r.category or ''}{sub}\n"
             f"   ✅ {r.correct}/{r.total}  📈 {r.score}%\n"
             f"   📅 {date}  (#{r.attempt_number} urinish)\n\n"

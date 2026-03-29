@@ -45,9 +45,7 @@ def question_full(q) -> str:
     ]
     if q.subcategory:
         lines.append(f"📌 Subcategory: <b>{q.subcategory}</b>")
-    if q.difficulty:
-        DIFF = {'easy': '🟢 Oson', 'medium': "🟡 O'rta", 'hard': '🔴 Qiyin'}
-        lines.append(f"🎯 Qiyinlik: <b>{DIFF.get(q.difficulty, q.difficulty)}</b>")
+
     if q.is_attestation:
         lines.append(f"🎓 Atestatsiya | Tartib: <b>{q.order_num}</b>")
 

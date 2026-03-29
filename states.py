@@ -10,12 +10,10 @@ class MenuStates(StatesGroup):
 class OnatiliStates(StatesGroup):
     category    = State()
     topic       = State()
-    difficulty  = State()
 
 class AdabiyotStates(StatesGroup):
     category    = State()
     grade       = State()
-    difficulty  = State()
 
 class AttestationStates(StatesGroup):
     choose_format = State()
@@ -27,7 +25,6 @@ class AdminStates(StatesGroup):
     add_subject       = State()
     add_category      = State()
     add_subcategory   = State()
-    add_difficulty    = State()
     add_is_attest     = State()
     add_order_num     = State()
     add_image         = State()

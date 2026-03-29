@@ -16,7 +16,7 @@ from database.db import (
 from keyboards.keyboards import (
     admin_keyboard, cancel_keyboard, main_menu_keyboard,
     subject_keyboard, addq_category_keyboard, addq_topic_keyboard,
-    addq_grade_keyboard, addq_difficulty_keyboard, correct_answer_keyboard,
+    addq_grade_keyboard, correct_answer_keyboard,
     skip_image_keyboard
 )
 from states import AdminStates
@@ -420,23 +420,6 @@ async def addq_bob(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AdminStates.add_image)
     await callback.answer()
 
-# Qiyinlik tanlash
-@router.callback_query(F.data.startswith("addq:diff:"))
-async def addq_difficulty(callback: CallbackQuery, state: FSMContext):
-    difficulty = callback.data.split(":")[2]
-    await state.update_data(difficulty=difficulty, is_attestation=False)
-    DIFF = {'easy': '🟢 Oson', 'medium': "🟡 O'rta", 'hard': '🔴 Qiyin'}
-    await callback.message.edit_text(
-        f"✅ Qiyinlik: <b>{DIFF.get(difficulty)}</b>\n\n"
-        f"📸 Savol rasmini yuboring yoki o'tkazib yuboring:",
-        parse_mode="HTML",
-    )
-    await callback.message.answer(
-        "📸 Rasm yuboring yoki o'tkazib yuboring:",
-        reply_markup=skip_image_keyboard()
-    )
-    await state.set_state(AdminStates.add_image)
-    await callback.answer()
 
 # Order num (attestation uchun)
 @router.message(AdminStates.add_order_num)

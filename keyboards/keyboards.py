@@ -297,15 +297,6 @@ def addq_bob_keyboard(grade: str):
     buttons.append([InlineKeyboardButton(text="❌ Bekor", callback_data="addq:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def addq_difficulty_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🟢 Oson",  callback_data="addq:diff:easy"),
-            InlineKeyboardButton(text="🟡 O'rta", callback_data="addq:diff:medium"),
-            InlineKeyboardButton(text="🔴 Qiyin", callback_data="addq:diff:hard"),
-        ],
-        [InlineKeyboardButton(text="❌ Bekor", callback_data="addq:cancel")],
-    ])
 
 def correct_answer_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[
