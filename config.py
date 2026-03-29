@@ -24,11 +24,11 @@ class Config:
     IMAGES_DIR:  str = field(default_factory=lambda: os.getenv("IMAGES_DIR",  "/var/www/bot_images"))
     IMAGES_URL:  str = field(default_factory=lambda: os.getenv("IMAGES_URL",  "https://images.eskiz.uz"))
 
-    PRICE_ONCE:        int = 3_500
-    PRICE_DAILY:       int = 35_000
-    PRICE_MONTHLY:     int = 100_000
-    PRICE_RETRY:       int = 3_500   # back-compat
-    PRICE_ATTESTATION: int = 10_000  # Attestatsiya — bir martalik
+    PRICE_ONCE:        int = 3_500     # faqat attestatsiya uchun qoladi
+    PRICE_DAILY:       int = 10_000   # Kunlik — 10,000 so'm
+    PRICE_MONTHLY:     int = 100_000  # Oylik — 100,000 so'm
+    PRICE_RETRY:       int = 3_500    # back-compat
+    PRICE_ATTESTATION: int = 5_000    # Attestatsiya — bir martalik 5,000 so'm
     PRICE_MILLIY:      int = 0        # Milliy sertifikat — oddiy to'lov tizimi (bepul + retry)
     MIN_QUESTIONS:     int = 35
     MAX_QUESTIONS:     int = 50

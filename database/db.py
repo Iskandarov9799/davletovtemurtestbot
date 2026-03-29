@@ -723,6 +723,19 @@ async def is_banned(telegram_id: int) -> bool:
     return bool(user and getattr(user, 'is_banned', False))
 
 
+async def reset_all_subscriptions() -> int:
+    """Barcha foydalanuvchilarning tarifini 0 ga tushirish (admin uchun)"""
+    now = _now()
+    async with _conn.AsyncSessionLocal() as s:
+        result = await s.execute(
+            update(Subscription)
+            .where(Subscription.expires_at > now)
+            .values(expires_at=now)
+        )
+        await s.commit()
+        return result.rowcount
+
+
 async def delete_all_questions() -> int:
     async with _conn.AsyncSessionLocal() as s:
         result = await s.execute(delete(Question))

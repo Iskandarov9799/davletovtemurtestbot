@@ -177,17 +177,14 @@ def attestation_format_keyboard(subject: str):
 # ══════════════════════════════════════════════
 
 def payment_options_keyboard(access_key: str):
+    """Kunlik va oylik tariflar — bir martalik YO'Q (faqat attestatsiyada)"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text="1️⃣ Bir martalik — 3,500 so'm",
-            callback_data=f"pay:once:{access_key}"
-        )],
-        [InlineKeyboardButton(
-            text="📅 Kunlik — 35,000 so'm",
+            text=f"📅 Kunlik — {config.PRICE_DAILY:,} so'm (24 soat)",
             callback_data=f"pay:daily:{access_key}"
         )],
         [InlineKeyboardButton(
-            text="📆 Oylik — 100,000 so'm",
+            text=f"📆 Oylik — {config.PRICE_MONTHLY:,} so'm (30 kun)",
             callback_data=f"pay:monthly:{access_key}"
         )],
         [InlineKeyboardButton(text="❌ Bekor", callback_data="payment:cancel")],

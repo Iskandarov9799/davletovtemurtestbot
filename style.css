@@ -122,8 +122,32 @@ body {
   text-transform: uppercase; letter-spacing: 0.8px;
 }
 .question-img {
-  width: 100%; border-radius: 10px; margin-bottom: 12px;
-  max-height: 160px; object-fit: cover; border: 1px solid var(--border);
+  width: 100%;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  max-height: 280px;
+  object-fit: contain;       /* to'liq ko'rsatish, qirqmaslik */
+  border: 1px solid var(--border);
+  cursor: zoom-in;
+  transition: all 0.25s ease;
+  background: rgba(0,0,0,0.2);
+}
+
+/* Kattalashtirish — JS orqali .img-zoomed class qo'shiladi */
+.question-img.img-zoomed {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 999;
+  cursor: zoom-out;
+  border: none;
+  margin: 0;
+  padding: 0;
 }
 .question-text { font-size: 15px; font-weight: 600; line-height: 1.55; word-break: break-word; }
 

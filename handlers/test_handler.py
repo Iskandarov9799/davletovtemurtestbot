@@ -373,15 +373,10 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
     encoded = encode_questions(q_list, meta)
     url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
 
-    # Mini App + PDF keyboard
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text  = f"🚀 {bolim_num}-bo'lim testini boshlash",
+            text    = f"🚀 {bolim_num}-bo'lim testini boshlash",
             web_app = WebAppInfo(url=url)
-        )],
-        [InlineKeyboardButton(
-            text          = "📄 PDF yuklab olish",
-            callback_data = f"attest:pdf:{bolim_num}:attestation"
         )],
     ])
 
@@ -389,7 +384,7 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
         f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
         f"📊 Savollar: <b>{len(questions)} ta</b>\n"
         f"🔒 Tartib bo'yicha\n\n"
-        f"Testni boshlang yoki PDF yuklab oling 👇"
+        f"Quyidagi tugmani bosib testni boshlang 👇"
     )
 
     if is_callback:

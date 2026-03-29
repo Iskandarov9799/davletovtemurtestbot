@@ -205,7 +205,17 @@ function renderQuestion(i) {
   if (imgEl) {
     const imgSrc = q.img || '';
     imgEl.style.display = imgSrc ? 'block' : 'none';
-    if (imgSrc) imgEl.src = imgSrc;
+    if (imgSrc) {
+      imgEl.src = imgSrc;
+      // Avvalgi listener ni o'chirish
+      imgEl.onclick = null;
+      imgEl.onclick = () => {
+        imgEl.classList.toggle('img-zoomed');
+        // Zoomed holda scroll blok
+        document.body.style.overflow = imgEl.classList.contains('img-zoomed') ? 'hidden' : '';
+        tg?.HapticFeedback?.impactOccurred('light');
+      };
+    }
   }
 
   // Feedback reset
