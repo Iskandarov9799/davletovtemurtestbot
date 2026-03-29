@@ -473,10 +473,12 @@ function showResult() {
     else                { emoji = '📋'; grade = 'Mutaxassis'; }
   } else {
     // Oddiy test bahosi (5 balli)
-    if      (pct >= 90) { emoji = '🏆'; grade = "A'lo (5)"; }
-    else if (pct >= 70) { emoji = '🎉'; grade = 'Yaxshi (4)'; }
-    else if (pct >= 50) { emoji = '📚'; grade = 'Qoniqarli (3)'; }
-    else                { emoji = '😔'; grade = 'Qoniqarsiz (2)'; }
+    // Oddiy testlar uchun ham xuddi shu baho tizimi
+    if      (pct >= 86) { emoji = '🏆'; grade = '70% ustama'; }
+    else if (pct >= 80) { emoji = '🥇'; grade = 'Oliy toifa'; }
+    else if (pct >= 70) { emoji = '🥈'; grade = '1-toifa'; }
+    else if (pct >= 60) { emoji = '🥉'; grade = '2-toifa'; }
+    else                { emoji = '📋'; grade = 'Mutaxassis'; }
   }
 
   // style.css elementlari

@@ -22,23 +22,22 @@ router = Router()
 
 def _attestation_grade(pct: float) -> tuple[str, str]:
     """
-    Attestatsiya bahosi:
     59 gacha   → Mutaxassis
-    60-69      → 2-toifa
-    70-79      → 1-toifa
-    80-85      → Oliy
-    86+        → Oliy + 70% ustama
+    60-68      → 2-toifa
+    70-78      → 1-toifa
+    80-85      → Oliy toifa
+    86+        → 70% ustama
     """
     if pct <= 59:
         return "Mutaxassis", "📋"
-    elif pct <= 69:
+    elif pct <= 68:
         return "2-toifa", "🥉"
-    elif pct <= 79:
+    elif pct <= 78:
         return "1-toifa", "🥈"
     elif pct <= 85:
-        return "Oliy", "🥇"
+        return "Oliy toifa", "🥇"
     else:
-        return "Oliy + 70% ustama", "🏆"
+        return "70% ustama", "🏆"
 
 
 @router.message(F.web_app_data)
@@ -100,12 +99,10 @@ async def receive_miniapp_data(message: Message, bot: Bot):
         standard_grade_line = ""
     else:
         # Oddiy test bahosi (5 balli)
-        if   pct >= 90: grade, gemoji = "A'lo (5)",      "🏆"
-        elif pct >= 70: grade, gemoji = "Yaxshi (4)",     "🎉"
-        elif pct >= 50: grade, gemoji = "Qoniqarli (3)",  "📚"
-        else:           grade, gemoji = "Qoniqarsiz (2)", "😔"
-        grade_line = f"{gemoji} <b>Baho: {grade}</b>"
-        encouragement = "🌟 Ajoyib! Shunday davom eting!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
+        # Oddiy testlar uchun ham attestatsiya tizimi ishlatiladi
+        grade, gemoji = _attestation_grade(pct)
+        grade_line = f"{gemoji} <b>Daraja: {grade}</b>"
+        encouragement = "🌟 Ajoyib natija!" if pct >= 70 else "📖 Ko'proq mashq qiling!"
         grade_emoji = gemoji
         standard_grade_line = grade_line
 
