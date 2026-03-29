@@ -197,54 +197,7 @@ async def confirm_payment(callback: CallbackQuery, bot: Bot):
         except Exception:
             pass
 
-    # ── Bir martalik to'lov ───────────────────
-    elif pt == 'once':
-        access_key = purchase.retry_key or ''
-        try:
-            if access_key and ':' in access_key:
-                parts      = access_key.split(':')
-                subject     = parts[0] if len(parts) > 0 else 'onatili'
-                category    = parts[1] if len(parts) > 1 else 'aralash'
-                subcategory = parts[2] if len(parts) > 2 and parts[2] != 'None' else None
 
-                cnt = await count_questions(
-                    subject=subject, category=category, subcategory=subcategory
-                )
-                questions = await get_questions(
-                    subject=subject, category=category,
-                    subcategory=subcategory, difficulty=None,
-                    count=min(cnt, config.MAX_QUESTIONS)
-                )
-                meta    = {
-                    'subject': subject, 'category': category,
-                    'subcategory': subcategory, 'is_attestation': False,
-                    'solution_url': config.SOLUTION_URL
-                }
-                q_list  = questions_to_miniapp(questions)
-                q_list  = await resolve_image_urls(q_list, bot)
-                encoded = encode_questions(q_list, meta)
-                url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
-
-                await bot.send_message(
-                    chat_id      = tid,
-                    text         = "✅ <b>To'lovingiz tasdiqlandi!</b>\n\n🎉 Testni boshlang 👇",
-                    reply_markup = test_link_keyboard(url),
-                    parse_mode   = "HTML"
-                )
-            else:
-                await bot.send_message(
-                    chat_id      = tid,
-                    text         = "✅ <b>To'lovingiz tasdiqlandi!</b>\n\nTestni boshlash uchun bo'limni tanlang.",
-                    reply_markup = main_menu_keyboard(),
-                    parse_mode   = "HTML"
-                )
-        except Exception:
-            await bot.send_message(
-                chat_id      = tid,
-                text         = "✅ <b>To'lovingiz tasdiqlandi!</b>\n\nTestni boshlash uchun bo'limni tanlang.",
-                reply_markup = main_menu_keyboard(),
-                parse_mode   = "HTML"
-            )
 
     # ── Milliy sertifikat ─────────────────────
     elif pt == 'milliy':

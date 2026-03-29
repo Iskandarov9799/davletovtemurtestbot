@@ -139,6 +139,10 @@ function buildGrid() {
     btn.textContent = i + 1;
     if (isWritten(q)) btn.classList.add('written');
     btn.onclick = () => jumpTo(i);
+    // Yozma savollar uchun alohida belgi
+    if (isWritten(q)) {
+      btn.title = 'Yozma savol';
+    }
     g.appendChild(btn);
   });
 }
@@ -605,9 +609,22 @@ function closeApp() {
 }
 
 // ══════════════════════════════════════════════
+function confirmFinish() {
+  const unanswered = answers.filter(a => a === null).length;
+  const skipped    = answers.filter(a => a === 'skip').length;
+  if (unanswered > 0 || skipped > 0) {
+    const msg = [];
+    if (unanswered > 0) msg.push(`${unanswered} ta javobsiz`);
+    if (skipped > 0)    msg.push(`${skipped} ta o'tkazilgan`);
+    if (!confirm(`⚠️ ${msg.join(', ')} savol bor.\nBari-bir yakunlaysizmi?`)) return;
+  }
+  showResult();
+}
+
 window.skipQuestion  = skipQuestion;
 window.nextQuestion  = nextQuestion;
 window.showResult    = showResult;
+window.confirmFinish = confirmFinish;
 window.submitWritten = submitWritten;
 window.retrySkipped  = retrySkipped;
 window.closeApp      = closeApp;

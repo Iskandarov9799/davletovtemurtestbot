@@ -3,7 +3,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 from database.db import (
-    is_registered, get_access_status, mark_free_used, mark_once_used,
+    is_registered, get_access_status, mark_free_used,
     has_attestation,
     get_questions, count_questions,
     mark_wrong_question, mark_correct_question
@@ -259,8 +259,8 @@ async def send_miniapp(callback, subject, category,
             return
         elif status == 'free':
             await mark_free_used(tid, access_key)
-        elif status == 'paid':
-            await mark_once_used(tid, access_key)
+        # 'paid' = kunlik yoki oylik obuna faol — testni boshlash
+        # (mark_once_used kerak emas, subscription expires_at bilan boshqariladi)
 
     questions = await get_questions(
         subject=subject, category=category,

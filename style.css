@@ -379,3 +379,18 @@ body {
   border-left: 3px solid #edb33f;
   color: #edb33f;
 }
+
+/* Attestatsiya daraja ranglari */
+.grade-mutaxassis { color: var(--muted2); }
+.grade-2toifa     { color: #cd7f32; }
+.grade-1toifa     { color: var(--muted2); }
+.grade-oliy       { color: #ffd700; }
+.grade-oliy-plus  { color: #3b82f6; }
+
+/* Natija ekran timer */
+.result-timer {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
