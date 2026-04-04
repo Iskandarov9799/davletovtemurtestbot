@@ -1,3 +1,5 @@
+import os
+import logging
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -11,9 +13,9 @@ from keyboards.keyboards import admin_keyboard
 from states import EditQuestionStates
 from config import config
 
-router   = Router()
+router    = Router()
+logger    = logging.getLogger(__name__)
 PAGE_SIZE = 5
-# Telegram callback_data max 64 char — search keyword uchun limit
 MAX_SEARCH_KW = 20
 
 
@@ -45,7 +47,6 @@ def question_full(q) -> str:
     ]
     if q.subcategory:
         lines.append(f"📌 Subcategory: <b>{q.subcategory}</b>")
-
     if q.is_attestation:
         lines.append(f"🎓 Atestatsiya | Tartib: <b>{q.order_num}</b>")
 
@@ -62,8 +63,8 @@ def question_full(q) -> str:
             f"\n✅ To'g'ri: <b>{q.correct_answer or '—'}</b>",
         ]
     else:
-        kw1 = getattr(q, 'keywords_1', None) or '—'
-        kw2 = getattr(q, 'keywords_2', None) or ''
+        kw1   = getattr(q, 'keywords_1', None) or '—'
+        kw2   = getattr(q, 'keywords_2', None) or ''
         parts = getattr(q, 'written_parts', 1) or 1
         lines.append(f"\n🔑 Kalit so'z (1): <b>{kw1}</b>")
         if parts == 2:
@@ -80,14 +81,13 @@ def page_keyboard(questions: list, page: int, total: int,
     for q in questions:
         attest = "🎓" if q.is_attestation else ''
         label  = f"{attest}#{q.id} — {q.question_text[:28]}…"
-        # callback_data max 64 char: "qedit:view:1234:5:all" = 21 char — safe
         buttons.append([InlineKeyboardButton(
             text          = label,
             callback_data = f"qedit:view:{q.id}:{page}:{prefix}"
         )])
 
-    nav          = []
-    total_pages  = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    nav         = []
+    total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     if page > 0:
         nav.append(InlineKeyboardButton(
             text="◀️", callback_data=f"qedit:page:{page-1}:{prefix}"))
@@ -152,6 +152,48 @@ def edit_field_keyboard(qid: int, page: int,
 
 
 # ══════════════════════════════════════════════
+# JSON GENERATSIYA
+# ══════════════════════════════════════════════
+
+async def generate_bolim_json(bolim_num: int) -> bool:
+    """Attestatsiya bo'limi savollarini JSON fayl sifatida saqlash."""
+    import json
+    from database.db import get_questions
+    from handlers.test_handler import questions_to_miniapp
+    from config import config
+
+    questions = await get_questions(
+        subject='attestation', category='attestation',
+        subcategory=f'bolim_{bolim_num}',
+        is_attestation=True, count=config.ATTESTATION_COUNT
+    )
+
+    payload = {
+        "meta": {
+            "subject":        "attestation",
+            "category":       "attestation",
+            "subcategory":    f"bolim_{bolim_num}",
+            "is_attestation": True,
+            "solution_url":   config.SOLUTION_URL,
+        },
+        "questions": questions_to_miniapp(questions)
+    }
+
+    pages_dir = os.getenv('GITHUB_PAGES_DIR', '')
+    if not pages_dir:
+        logger.warning("GITHUB_PAGES_DIR .env da yo'q — JSON saqlanmadi")
+        return False
+
+    os.makedirs(pages_dir, exist_ok=True)
+    fpath = os.path.join(pages_dir, f'bolim_{bolim_num}.json')
+    with open(fpath, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
+
+    logger.info(f"✅ bolim_{bolim_num}.json saqlandi ({len(questions)} savol)")
+    return True
+
+
+# ══════════════════════════════════════════════
 # OCHISH
 # ══════════════════════════════════════════════
 
@@ -180,39 +222,6 @@ async def open_question_list(message: Message, state: FSMContext):
 # SAHIFALASH
 # ══════════════════════════════════════════════
 
-
-async def generate_bolim_json(bolim_num: int) -> bool:
-    """Attestatsiya bolim savollarini GitHub Pages uchun JSON ga yozish."""
-    from database.db import get_questions
-    from handlers.test_handler import questions_to_miniapp
-    from config import config
-
-    questions = await get_questions(
-        subject='attestation', category='attestation',
-        subcategory=f'bolim_{bolim_num}',
-        is_attestation=True, count=config.ATTESTATION_COUNT
-    )
-    payload = {
-        "meta": {
-            "subject": "attestation", "category": "attestation",
-            "subcategory": f"bolim_{bolim_num}",
-            "is_attestation": True, "solution_url": config.SOLUTION_URL,
-        },
-        "questions": questions_to_miniapp(questions)
-    }
-    pages_dir = os.getenv('GITHUB_PAGES_DIR', '')
-    if not pages_dir:
-        logger.warning("GITHUB_PAGES_DIR .env da yo'q — JSON saqlanmadi")
-        return False
-    os.makedirs(pages_dir, exist_ok=True)
-    fpath = os.path.join(pages_dir, f'bolim_{bolim_num}.json')
-    import json as _json
-    with open(fpath, 'w', encoding='utf-8') as f:
-        _json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
-    logger.info(f"✅ bolim_{bolim_num}.json yangilandi ({len(questions)} savol)")
-    return True
-
-
 @router.callback_query(F.data.startswith("qedit:page:"))
 async def turn_page(callback: CallbackQuery):
     parts  = callback.data.split(":")
@@ -220,7 +229,6 @@ async def turn_page(callback: CallbackQuery):
     prefix = parts[3]
 
     if prefix.startswith("srch|"):
-        # search|keyword — callback_data da keyword qisqartirilgan
         keyword   = prefix[5:]
         questions = await search_questions(keyword)
         total     = len(questions)
@@ -239,7 +247,6 @@ async def turn_page(callback: CallbackQuery):
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except Exception:
-        # Oldingi xabar rasm bo'lsa — o'chirib yangi yuborish
         try:
             await callback.message.delete()
         except Exception:
@@ -313,8 +320,10 @@ async def edit_question(callback: CallbackQuery, state: FSMContext):
             parse_mode   = "HTML"
         )
     except Exception:
-        try: await callback.message.delete()
-        except Exception: pass
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
         await callback.bot.send_message(
             chat_id      = callback.from_user.id,
             text         = f"✏️ <b>Savol #{qid} — qaysi maydonni tahrirlaysiz?</b>",
@@ -393,10 +402,12 @@ async def edit_value_received(message: Message, state: FSMContext):
     # Attestatsiya savoli bo'lsa — JSON yangilash
     if q and q.subcategory and q.subcategory.startswith('bolim_'):
         try:
-            _bn = int(q.subcategory.split('_')[1])
-            await generate_bolim_json(_bn)
-        except Exception as _e:
-            logger.error(f"JSON xato: {_e}")
+            bn = int(q.subcategory.split('_')[1])
+            ok = await generate_bolim_json(bn)
+            if ok:
+                await message.answer(f"🔄 bolim_{bn}.json yangilandi.")
+        except Exception as e:
+            logger.error(f"JSON yangilashda xato: {e}")
 
 
 # ══════════════════════════════════════════════
@@ -426,8 +437,10 @@ async def delete_question_confirm(callback: CallbackQuery, state: FSMContext):
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except Exception:
-        try: await callback.message.delete()
-        except Exception: pass
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
         await callback.bot.send_message(
             chat_id=callback.from_user.id, text=text,
             reply_markup=kb, parse_mode="HTML"
@@ -443,16 +456,23 @@ async def delete_question_confirmed(callback: CallbackQuery, state: FSMContext):
     page   = int(parts[3])
     prefix = parts[4]
 
+    # O'chirishdan oldin ma'lumotni olib qo'yamiz
+    q = await get_question_by_id(qid)
+    bolim_num = None
+    if q and q.subcategory and q.subcategory.startswith('bolim_'):
+        try:
+            bolim_num = int(q.subcategory.split('_')[1])
+        except Exception:
+            pass
+
     await delete_question(qid)
     await state.clear()
 
     subject  = None if prefix == "all" else prefix.split("|")[0]
     category = prefix.split("|")[1] if "|" in prefix else None
 
-    # Page chapga siljishi mumkin
-    total = await count_questions(subject=subject, category=category)
+    total     = await count_questions(subject=subject, category=category)
     safe_page = min(page, max(0, (total - 1) // PAGE_SIZE))
-
     questions = await get_questions_page(
         subject=subject, category=category,
         offset=safe_page * PAGE_SIZE, limit=PAGE_SIZE
@@ -466,17 +486,16 @@ async def delete_question_confirmed(callback: CallbackQuery, state: FSMContext):
     await callback.answer("✅ O'chirildi!")
 
     # Attestatsiya savoli bo'lsa — JSON yangilash
-    try:
-        from database.db import get_question_by_id as _gq
-        _dq = await _gq(qid)
-    except Exception:
-        _dq = None
-    if _dq and _dq.subcategory and _dq.subcategory.startswith('bolim_'):
+    if bolim_num:
         try:
-            _bn = int(_dq.subcategory.split('_')[1])
-            await generate_bolim_json(_bn)
-        except Exception as _e:
-            logger.error(f"JSON xato: {_e}")
+            ok = await generate_bolim_json(bolim_num)
+            if ok:
+                await callback.bot.send_message(
+                    chat_id = callback.from_user.id,
+                    text    = f"🔄 bolim_{bolim_num}.json yangilandi."
+                )
+        except Exception as e:
+            logger.error(f"JSON yangilashda xato: {e}")
 
 
 # ══════════════════════════════════════════════
@@ -500,7 +519,7 @@ async def search_questions_handler(message: Message, state: FSMContext):
         await message.answer("❌ Bekor qilindi.", reply_markup=admin_keyboard())
         return
 
-    keyword   = (message.text or '').strip()[:MAX_SEARCH_KW]  # 64 char limit uchun
+    keyword   = (message.text or '').strip()[:MAX_SEARCH_KW]
     questions = await search_questions(keyword)
 
     if not questions:
@@ -511,7 +530,6 @@ async def search_questions_handler(message: Message, state: FSMContext):
         return
 
     await state.clear()
-    # Prefix: "srch|keyword" — max 5+20=25 char, safe
     prefix = f"srch|{keyword}"
     total  = len(questions)
 
@@ -534,7 +552,6 @@ async def close_editor(callback: CallbackQuery, state: FSMContext):
         await callback.message.delete()
     except Exception:
         pass
-    # callback.message.answer() crash beradi (delete dan keyin) — bot.send_message ishlatamiz
     await callback.bot.send_message(
         chat_id      = callback.from_user.id,
         text         = "📋 Savollar muharriri yopildi.",
