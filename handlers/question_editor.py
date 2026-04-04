@@ -190,6 +190,24 @@ async def generate_bolim_json(bolim_num: int) -> bool:
         json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
 
     logger.info(f"✅ bolim_{bolim_num}.json saqlandi ({len(questions)} savol)")
+
+    # Git ga commit va push
+    import subprocess
+    repo_dir = pages_dir
+    try:
+        subprocess.run(['git', 'add', f'bolim_{bolim_num}.json'],
+                       cwd=repo_dir, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', f'auto: bolim_{bolim_num}.json yangilandi'],
+                       cwd=repo_dir, capture_output=True)
+        result = subprocess.run(['git', 'push'],
+                                cwd=repo_dir, capture_output=True, text=True)
+        if result.returncode == 0:
+            logger.info(f"✅ bolim_{bolim_num}.json GitHub ga push qilindi")
+        else:
+            logger.warning(f"⚠️ git push xato: {result.stderr}")
+    except Exception as e:
+        logger.error(f"git push xato: {e}")
+
     return True
 
 
