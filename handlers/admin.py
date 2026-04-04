@@ -1701,3 +1701,23 @@ async def excel_import_upload(message: Message):
         text += f"\n⚠️ <b>Xatolar:</b>\n<code>{error_text}</code>"
 
     await message.answer(text, parse_mode="HTML", reply_markup=admin_keyboard())
+
+@router.message(F.text == "🔄 JSON yangilash")
+async def regenerate_all_json(message: Message):
+    """Barcha 10 ta bo'lim JSON fayllarini qayta generatsiya qilish."""
+    if message.from_user.id not in config.ADMIN_IDS:
+        return
+    from handlers.question_editor import generate_bolim_json
+    await message.answer("⏳ JSON fayllar yangilanmoqda...")
+    success = 0
+    for i in range(1, 11):
+        try:
+            ok = await generate_bolim_json(i)
+            if ok:
+                success += 1
+        except Exception as e:
+            logger.error(f"bolim_{i} JSON xato: {e}")
+    await message.answer(
+        f"✅ {success}/10 ta JSON fayl yangilandi.\n"
+        f"GitHub Pages da o'zgarishlar 1-2 daqiqa ichida ko'rinadi."
+    )

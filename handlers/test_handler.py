@@ -215,10 +215,9 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
         "is_attestation": True,
         "solution_url":   config.SOLUTION_URL
     }
-    q_list  = questions_to_miniapp(questions)
-    q_list  = await resolve_image_urls(q_list, message_or_callback.bot)
-    encoded = encode_questions(q_list, meta)
-    url     = f"{config.MINI_APP_URL.rstrip('/')}/?data={encoded}"
+    # Attestatsiya uchun URL — GitHub Pages da bolim_N.json fayl
+    # Savollarni URL ga encode qilmaymiz — juda uzun bo'ladi
+    url = f"{config.MINI_APP_URL.rstrip('/')}/?bolim={bolim_num}"
 
     kb = make_test_keyboard(url, f"🚀 {bolim_num}-bo'lim testini boshlash")
 

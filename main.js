@@ -27,9 +27,36 @@ const DEMO = [
 // ══════════════════════════════════════════════
 async function loadQuestionsFromHash() {
   showLoader(true);
-  const params = new URLSearchParams(window.location.search);
-  const hash   = params.get('data') || window.location.hash.slice(1);
+  const params  = new URLSearchParams(window.location.search);
+  const bolim   = params.get('bolim');   // attestatsiya: ?bolim=1
+  const subject = params.get('subject'); // boshqa: ?subject=onatili
+  const hash    = params.get('data') || window.location.hash.slice(1);
 
+  // ── 1. Attestatsiya bo'limi — GitHub Pages da JSON fayl ──
+  if (bolim) {
+    try {
+      const baseUrl = window.location.href.split('?')[0].replace(/\/?$/, '/');
+      const jsonUrl = `${baseUrl}bolim_${bolim}.json`;
+      console.log('📥 Fetching:', jsonUrl);
+      const res = await fetch(jsonUrl + '?t=' + Date.now());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const parsed = await res.json();
+      questions = parsed.questions || parsed;
+      meta      = parsed.meta || {
+        subject: 'attestation', category: 'attestation',
+        subcategory: `bolim_${bolim}`, is_attestation: true
+      };
+      console.log(`✅ ${questions.length} ta savol yuklandi (bolim_${bolim}.json)`);
+      initTest();
+    } catch (e) {
+      console.error('JSON yuklanmadi:', e);
+      showError(`❌ ${bolim}-bo'lim savollari yuklanmadi. Qaytadan urinib ko'ring.`);
+    }
+    showLoader(false);
+    return;
+  }
+
+  // ── 2. Eski usul — URL da data parametri (boshqa testlar uchun) ──
   if (!hash) {
     questions = DEMO;
     meta      = { subject:'onatili', category:'demo', is_attestation:false };
@@ -84,6 +111,13 @@ function showLoader(on) {
   if (el) el.style.display = on ? 'flex' : 'none';
 }
 
+function showError(msg) {
+  const el = document.getElementById('question-text') || document.getElementById('qtxt');
+  if (el) el.textContent = msg;
+  document.getElementById('test-screen').style.display   = 'block';
+  document.getElementById('result-screen').style.display = 'none';
+}
+
 // ══════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════
@@ -108,7 +142,6 @@ function initTest() {
   const titleEl = document.getElementById('header-title') || document.getElementById('hdr-title');
   if (titleEl) titleEl.textContent = SUBJ[meta.subject] || '📚 Test';
   const subEl = document.getElementById('header-sub') || document.getElementById('hdr-sub');
-  // Subcategory ko'rsatish (masalan: 1-bo'lim)
   let subLabel = meta.subcategory
     ? meta.subcategory.replace("bolim_", "") + "-bo'lim"
     : (meta.category || '');
@@ -126,7 +159,7 @@ function initTest() {
 }
 
 // ══════════════════════════════════════════════
-// GRID — style.css: .grid-btn, .current, .g-correct, .g-wrong, .g-skip
+// GRID
 // ══════════════════════════════════════════════
 function buildGrid() {
   const g = document.getElementById('grid');
@@ -139,10 +172,7 @@ function buildGrid() {
     btn.textContent = i + 1;
     if (isWritten(q)) btn.classList.add('written');
     btn.onclick = () => jumpTo(i);
-    // Yozma savollar uchun alohida belgi
-    if (isWritten(q)) {
-      btn.title = 'Yozma savol';
-    }
+    if (isWritten(q)) btn.title = 'Yozma savol';
     g.appendChild(btn);
   });
 }
@@ -181,8 +211,7 @@ function renderQuestion(i) {
   const q     = questions[i];
   const total = questions.length;
 
-  // Progress
-  const pct = Math.round((i + 1) / total * 100);
+  const pct    = Math.round((i + 1) / total * 100);
   const fillEl = document.getElementById('progress-fill') || document.getElementById('prg-fill');
   if (fillEl) fillEl.style.width = pct + '%';
   const numEl = document.getElementById('progress-num') || document.getElementById('prg-label');
@@ -190,43 +219,35 @@ function renderQuestion(i) {
   const pctEl = document.getElementById('progress-pct') || document.getElementById('prg-pct');
   if (pctEl) pctEl.textContent = pct + '%';
 
-  // Score
   const scoreEl = document.getElementById('score-badge') || document.getElementById('hdr-score');
   if (scoreEl) scoreEl.textContent = score + ' ball';
 
-  // Savol
   const badgeEl = document.getElementById('question-badge') || document.getElementById('qnum');
   if (badgeEl) badgeEl.textContent = `SAVOL ${i + 1}`;
   const textEl = document.getElementById('question-text') || document.getElementById('qtxt');
-  // Yangi qator va abzaslarni saqlab ko'rsatish
   if (textEl) {
     const raw = (q.t || q.question_text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     textEl.innerHTML = raw.replace(/\n/g, '<br>');
   }
 
-  // Rasm
-  const imgEl  = document.getElementById('question-img') || document.getElementById('qimg');
+  const imgEl = document.getElementById('question-img') || document.getElementById('qimg');
   if (imgEl) {
     const imgSrc = q.img || '';
     imgEl.style.display = imgSrc ? 'block' : 'none';
     if (imgSrc) {
-      imgEl.src = imgSrc;
-      // Avvalgi listener ni o'chirish
+      imgEl.src     = imgSrc;
       imgEl.onclick = null;
       imgEl.onclick = () => {
         imgEl.classList.toggle('img-zoomed');
-        // Zoomed holda scroll blok
         document.body.style.overflow = imgEl.classList.contains('img-zoomed') ? 'hidden' : '';
         tg?.HapticFeedback?.impactOccurred('light');
       };
     }
   }
 
-  // Feedback reset
   const fb = document.getElementById('feedback') || document.getElementById('fb');
   if (fb) { fb.className = 'feedback'; fb.style.display = 'none'; fb.innerHTML = ''; }
 
-  // Tugmalar
   const btnSkip   = document.getElementById('btn-skip');
   const btnNext   = document.getElementById('btn-next');
   const btnFinish = document.getElementById('btn-finish');
@@ -239,7 +260,7 @@ function renderQuestion(i) {
 }
 
 // ══════════════════════════════════════════════
-// VARIANTLAR — style.css: .option, .option-letter, .option-text
+// VARIANTLAR
 // ══════════════════════════════════════════════
 function renderChoiceQuestion(q) {
   const opts = document.getElementById('options') || document.getElementById('opts');
@@ -271,7 +292,6 @@ function renderWrittenQuestion(q) {
   if (!wc) {
     wc    = document.createElement('div');
     wc.id = 'written-container';
-    // question-card ichiga qo'shamiz
     const card = document.querySelector('.question-card') || document.querySelector('.qcard');
     if (card) card.appendChild(wc);
     else if (opts) opts.parentNode.insertBefore(wc, opts.nextSibling);
@@ -295,7 +315,6 @@ function renderWrittenQuestion(q) {
 
 // ══════════════════════════════════════════════
 // VARIANT TANLASH
-// style.css: .option.correct, .option.wrong, .option.show-correct, .option.disabled
 // ══════════════════════════════════════════════
 function selectOption(label) {
   if (answered) return;
@@ -440,10 +459,8 @@ function nextQuestion() {
 
 // ══════════════════════════════════════════════
 // NATIJA
-// style.css: .result-score, .stat-val, .result-grid-box, .grid-btn
 // ══════════════════════════════════════════════
 function showResult() {
-
   const total = questions.length;
   let correct = 0, wrong = 0, skip = 0;
 
@@ -462,27 +479,13 @@ function showResult() {
   document.getElementById('test-screen').style.display   = 'none';
   document.getElementById('result-screen').style.display = 'flex';
 
-  // Baho tizimi
   let emoji, grade;
-  if (meta.is_attestation || meta.subject === 'attestation' || meta.subject === 'milliy') {
-    // Attestatsiya baho tizimi
-    if      (pct >= 86) { emoji = '🏆'; grade = '70% ustama'; }
-    else if (pct >= 80) { emoji = '🥇'; grade = 'Oliy toifa'; }
-    else if (pct >= 70) { emoji = '🥈'; grade = '1-toifa'; }
-    else if (pct >= 60) { emoji = '🥉'; grade = '2-toifa'; }
-    else                { emoji = '📋'; grade = 'Mutaxassis'; }
-  } else {
-    // Oddiy test bahosi (5 balli)
-    // Oddiy testlar uchun ham xuddi shu baho tizimi
-    if      (pct >= 86) { emoji = '🏆'; grade = '70% ustama'; }
-    else if (pct >= 80) { emoji = '🥇'; grade = 'Oliy toifa'; }
-    else if (pct >= 70) { emoji = '🥈'; grade = '1-toifa'; }
-    else if (pct >= 60) { emoji = '🥉'; grade = '2-toifa'; }
-    else                { emoji = '📋'; grade = 'Mutaxassis'; }
-  }
+  if      (pct >= 86) { emoji = '🏆'; grade = '70% ustama'; }
+  else if (pct >= 80) { emoji = '🥇'; grade = 'Oliy toifa'; }
+  else if (pct >= 70) { emoji = '🥈'; grade = '1-toifa'; }
+  else if (pct >= 60) { emoji = '🥉'; grade = '2-toifa'; }
+  else                { emoji = '📋'; grade = 'Mutaxassis'; }
 
-  // style.css elementlari
-  // Foydalanuvchi ismi — Telegram dan
   const userEl = document.getElementById('result-user');
   if (userEl) {
     const u = tg?.initDataUnsafe?.user;
@@ -506,7 +509,6 @@ function showResult() {
   if (wrongEl) wrongEl.textContent = wrongOnly;
   if (skipEl)  skipEl.textContent  = skip;
 
-  // Result grid — style.css: .grid-btn, .g-correct, .g-wrong, .g-skip
   const rg = document.getElementById('result-grid');
   if (rg) {
     rg.innerHTML = '';
@@ -528,7 +530,6 @@ function showResult() {
     });
   }
 
-  // To'g'ri javoblar ro'yxati
   const answerList = document.getElementById('answer-list');
   if (answerList) {
     answerList.innerHTML = '';
@@ -563,10 +564,9 @@ function retrySkipped(idx) {
 }
 
 // ══════════════════════════════════════════════
-// NATIJANI BOTGA YUBORISH — tg.sendData()
+// NATIJANI BOTGA YUBORISH
 // ══════════════════════════════════════════════
 function sendResult({ correct, wrong, skip, total, pct }) {
-
   const wrongIds   = [];
   const correctIds = [];
   answers.forEach((a, i) => {
@@ -596,13 +596,11 @@ function sendResult({ correct, wrong, skip, total, pct }) {
   if (tg && typeof tg.sendData === 'function') {
     try {
       tg.sendData(JSON.stringify(payload));
-      // tg.close() chaqirilmaydi — foydalanuvchi javoblarni ko'rishi mumkin
-      // Yopish uchun "Yopish" tugmasi bor
     } catch (e) {
       console.error('sendData xato:', e);
     }
   } else {
-    console.warn('tg.sendData yo\'q — demo rejimi');
+    console.warn("tg.sendData yo'q — demo rejimi");
   }
 }
 

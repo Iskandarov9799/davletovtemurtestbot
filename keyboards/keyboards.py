@@ -46,6 +46,7 @@ def admin_keyboard():
             [KeyboardButton(text="🗂 Bo'lim o'chirish"),   KeyboardButton(text="➕ Bo'lim qo'shish")],
             [KeyboardButton(text="🗑 Savollarni o'chirish"),   KeyboardButton(text="🔗 Yechim linki")],
             [KeyboardButton(text="♻️ Tariflarni nollash")],
+            [KeyboardButton(text="🔄 JSON yangilash")],
             [KeyboardButton(text="🔙 Orqaga")],
         ],
         resize_keyboard=True

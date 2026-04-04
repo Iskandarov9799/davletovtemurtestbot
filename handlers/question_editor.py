@@ -180,6 +180,39 @@ async def open_question_list(message: Message, state: FSMContext):
 # SAHIFALASH
 # ══════════════════════════════════════════════
 
+
+async def generate_bolim_json(bolim_num: int) -> bool:
+    """Attestatsiya bolim savollarini GitHub Pages uchun JSON ga yozish."""
+    from database.db import get_questions
+    from handlers.test_handler import questions_to_miniapp
+    from config import config
+
+    questions = await get_questions(
+        subject='attestation', category='attestation',
+        subcategory=f'bolim_{bolim_num}',
+        is_attestation=True, count=config.ATTESTATION_COUNT
+    )
+    payload = {
+        "meta": {
+            "subject": "attestation", "category": "attestation",
+            "subcategory": f"bolim_{bolim_num}",
+            "is_attestation": True, "solution_url": config.SOLUTION_URL,
+        },
+        "questions": questions_to_miniapp(questions)
+    }
+    pages_dir = os.getenv('GITHUB_PAGES_DIR', '')
+    if not pages_dir:
+        logger.warning("GITHUB_PAGES_DIR .env da yo'q — JSON saqlanmadi")
+        return False
+    os.makedirs(pages_dir, exist_ok=True)
+    fpath = os.path.join(pages_dir, f'bolim_{bolim_num}.json')
+    import json as _json
+    with open(fpath, 'w', encoding='utf-8') as f:
+        _json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
+    logger.info(f"✅ bolim_{bolim_num}.json yangilandi ({len(questions)} savol)")
+    return True
+
+
 @router.callback_query(F.data.startswith("qedit:page:"))
 async def turn_page(callback: CallbackQuery):
     parts  = callback.data.split(":")
@@ -357,6 +390,14 @@ async def edit_value_received(message: Message, state: FSMContext):
         parse_mode   = "HTML"
     )
 
+    # Attestatsiya savoli bo'lsa — JSON yangilash
+    if q and q.subcategory and q.subcategory.startswith('bolim_'):
+        try:
+            _bn = int(q.subcategory.split('_')[1])
+            await generate_bolim_json(_bn)
+        except Exception as _e:
+            logger.error(f"JSON xato: {_e}")
+
 
 # ══════════════════════════════════════════════
 # O'CHIRISH
@@ -423,6 +464,19 @@ async def delete_question_confirmed(callback: CallbackQuery, state: FSMContext):
         parse_mode   = "HTML"
     )
     await callback.answer("✅ O'chirildi!")
+
+    # Attestatsiya savoli bo'lsa — JSON yangilash
+    try:
+        from database.db import get_question_by_id as _gq
+        _dq = await _gq(qid)
+    except Exception:
+        _dq = None
+    if _dq and _dq.subcategory and _dq.subcategory.startswith('bolim_'):
+        try:
+            _bn = int(_dq.subcategory.split('_')[1])
+            await generate_bolim_json(_bn)
+        except Exception as _e:
+            logger.error(f"JSON xato: {_e}")
 
 
 # ══════════════════════════════════════════════
