@@ -62,7 +62,7 @@ def make_test_keyboard(url: str, label: str = "🚀 Testni boshlash") -> InlineK
 
 async def safe_edit(callback: CallbackQuery, text: str,
                     reply_markup=None) -> None:
-    """Xavfsiz inline-xabar tahrirlash — TelegramBadRequest ni e'tiborsiz qoldiradi."""
+    """Xavfsiz inline-xabar tahrirlash."""
     try:
         await callback.message.edit_text(
             text,
@@ -209,11 +209,11 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
         )
 
     meta = {
-        "subject":      "attestation",
-        "category":     "attestation",
-        "subcategory":  subcategory,
+        "subject":        "attestation",
+        "category":       "attestation",
+        "subcategory":    subcategory,
         "is_attestation": True,
-        "solution_url": config.SOLUTION_URL
+        "solution_url":   config.SOLUTION_URL
     }
     q_list  = questions_to_miniapp(questions)
     q_list  = await resolve_image_urls(q_list, message_or_callback.bot)
@@ -230,7 +230,22 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
     )
 
     if is_callback:
-        await safe_edit(message_or_callback, text, reply_markup=kb)
+        # edit_text ishlamasa (rasmli xabar bo'lsa) — o'chirib yangi yuborish
+        try:
+            await message_or_callback.message.edit_text(
+                text, reply_markup=kb, parse_mode="HTML"
+            )
+        except Exception:
+            try:
+                await message_or_callback.message.delete()
+            except Exception:
+                pass
+            await message_or_callback.bot.send_message(
+                chat_id    = message_or_callback.from_user.id,
+                text       = text,
+                reply_markup = kb,
+                parse_mode = "HTML"
+            )
         await message_or_callback.answer()
     else:
         await message_or_callback.answer(text, reply_markup=kb, parse_mode="HTML")
@@ -292,11 +307,17 @@ async def _launch_milliy_msg(message: Message, tid: int):
 
 @router.message(F.text == "🎬 Videodarslar")
 async def videodarslar_menu(message: Message):
-    await message.answer("🎬 <b>Videodarslar</b>\n\n⏳ Bu bo'lim tez orada ishga tushadi!", parse_mode="HTML")
+    await message.answer(
+        "🎬 <b>Videodarslar</b>\n\n⏳ Bu bo'lim tez orada ishga tushadi!",
+        parse_mode="HTML"
+    )
 
 @router.message(F.text == "🎧 Audiolar")
 async def audiolar_menu(message: Message):
-    await message.answer("🎧 <b>Audiolar</b>\n\n⏳ Bu bo'lim tez orada ishga tushadi!", parse_mode="HTML")
+    await message.answer(
+        "🎧 <b>Audiolar</b>\n\n⏳ Bu bo'lim tez orada ishga tushadi!",
+        parse_mode="HTML"
+    )
 
 
 # ══════════════════════════════════════════════
@@ -474,7 +495,6 @@ async def attestation_bolim(callback: CallbackQuery):
     )
 
     if not await has_attestation(tid, bolim_key):
-        # safe_edit ishlamasa — yangi xabar yuborish
         try:
             await callback.message.edit_text(
                 buy_text, reply_markup=kb_buy, parse_mode="HTML"
