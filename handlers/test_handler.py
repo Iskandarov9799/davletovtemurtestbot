@@ -456,26 +456,39 @@ async def attestation_bolim(callback: CallbackQuery):
     tid       = callback.from_user.id
 
     bolim_key = f"bolim_{bolim_num}"
+    kb_buy = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"💳 Sotib olish — {config.PRICE_ATTESTATION:,} so'm",
+            callback_data=f"buy:attest_bolim:{bolim_num}"
+        )],
+        [InlineKeyboardButton(
+            text="🔙 Orqaga",
+            callback_data="back:attestation"
+        )],
+    ])
+    buy_text = (
+        f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
+        f"📋 35 ta savol | Bir martalik to'lov\n"
+        f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>\n\n"
+        f"To'lov qilganingizdan so'ng faqat <b>{bolim_num}-bo'lim</b> ochiladi."
+    )
+
     if not await has_attestation(tid, bolim_key):
-        await safe_edit(callback,
-            f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
-            f"📋 35 ta savol | Bir martalik to'lov\n"
-            f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>\n\n"
-            f"To'lov qilganingizdan so'ng faqat <b>{bolim_num}-bo'lim</b> ochiladi.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=f"💳 Sotib olish — {config.PRICE_ATTESTATION:,} so'm",
-                    callback_data=f"buy:attest_bolim:{bolim_num}"
-                )],
-                [InlineKeyboardButton(
-                    text="🔙 Orqaga",
-                    callback_data="back:attestation"
-                )],
-            ])
-        )
+        # safe_edit ishlamasa — yangi xabar yuborish
+        try:
+            await callback.message.edit_text(
+                buy_text, reply_markup=kb_buy, parse_mode="HTML"
+            )
+        except Exception:
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await callback.bot.send_message(
+                chat_id=tid, text=buy_text,
+                reply_markup=kb_buy, parse_mode="HTML"
+            )
         await callback.answer()
         return
 
     await _launch_attestation_bolim(callback, tid, bolim_num, is_callback=True)
-
-    
