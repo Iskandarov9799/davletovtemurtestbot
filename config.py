@@ -22,12 +22,16 @@ class Config:
 
     # ── Rasm saqlash (VPS) ──────────────────────
     IMAGES_DIR:  str = field(default_factory=lambda: os.getenv("IMAGES_DIR",  "/var/www/bot_images"))
-    IMAGES_URL:  str = field(default_factory=lambda: os.getenv("IMAGES_URL",  "https://images.eskiz.uz"))
+    IMAGES_URL:  str = field(default_factory=lambda: os.getenv("IMAGES_URL",  "http://170.168.6.220/images"))
 
-    PRICE_MILLIY:     int = field(default_factory=lambda: int(os.getenv('PRICE_MILLIY', '50000')))
-    PRICE_DAILY:       int = 10_000   # Kunlik — 10,000 so'm
-    PRICE_MONTHLY:     int = 100_000  # Oylik — 100,000 so'm
-    PRICE_ATTESTATION: int = 5_000    # Attestatsiya — bir martalik 5,000 so'm
+    # ── API server (Mini App uchun) ─────────────
+    API_SECRET:  str = field(default_factory=lambda: os.getenv("API_SECRET", "change_me_secret_token"))
+    API_PORT:    int = field(default_factory=lambda: int(os.getenv("API_PORT", "8080")))
+
+    PRICE_DAILY:       int = 10_000
+    PRICE_MONTHLY:     int = 100_000
+    PRICE_ATTESTATION: int = 5_000
+    PRICE_MILLIY:      int = field(default_factory=lambda: int(os.getenv('PRICE_MILLIY', '50000')))
     MIN_QUESTIONS:     int = 35
     MAX_QUESTIONS:     int = 50
     ATTESTATION_COUNT: int = 35
@@ -37,7 +41,6 @@ class Config:
         'adabiyot': '📖 Adabiyot',
     }
 
-    # ── Ona tili bo'limlari ─────────────────────
     ONA_TILI_BOLIMLAR = {
         'fonetika':      '🔤 Fonetika',
         'imlo':          '✏️ Imlo',
@@ -52,7 +55,6 @@ class Config:
         'uslubiyat':     '🎨 Uslubiyat',
     }
 
-    # Har bir bo'lim uchun sub-mavzular
     ONA_TILI_SUBMAVZULAR = {
         'fonetika':      {
             'tovushlar_tasnifi': "Tovushlar tasnifi",
@@ -99,13 +101,11 @@ class Config:
             'qoshimchalar_uslubiyat': "Qo'shimchalar uslubiyati",
             'sozlar_uslubiyat':       "So'zlar uslubiyati",
         },
-        'punktuatsiya':  {},  # sub-mavzu yo'q
+        'punktuatsiya':  {},
     }
 
-    # Moslash uchun — eski kod bilan back-compat
     ONA_TILI_TOPICS = ONA_TILI_BOLIMLAR
 
-    # ── Adabiyot ───────────────────────────────
     ADABIYOT_BOBLAR = {
         '5':  {'1': "1-bob", '2': "2-bob", '3': "3-bob", '4': "4-bob"},
         '6':  {'1': "1-bob", '2': "2-bob", '3': "3-bob", '4': "4-bob"},
@@ -126,7 +126,6 @@ class Config:
         '8': '8-sinf', '9': '9-sinf', '10': '10-sinf', '11': '11-sinf',
     }
 
-
     def validate(self):
         errors = []
         if not self.BOT_TOKEN:
@@ -137,6 +136,8 @@ class Config:
             errors.append("❌ ADMIN_IDS — .env faylida yo'q!")
         if not self.MINI_APP_URL:
             errors.append("⚠️  MINI_APP_URL — .env faylida yo'q (mini app ishlamaydi)")
+        if self.API_SECRET == "change_me_secret_token":
+            errors.append("⚠️  API_SECRET — .env da o'zgartiring!")
         if errors:
             for e in errors:
                 print(e)

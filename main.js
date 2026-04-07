@@ -28,29 +28,40 @@ const DEMO = [
 async function loadQuestionsFromHash() {
   showLoader(true);
   const params  = new URLSearchParams(window.location.search);
-  const bolim   = params.get('bolim');   // attestatsiya: ?bolim=1
-  const subject = params.get('subject'); // boshqa: ?subject=onatili
+  const bolim   = params.get('bolim');
+  const token   = params.get('token');
   const hash    = params.get('data') || window.location.hash.slice(1);
 
-  // ── 1. Attestatsiya bo'limi — GitHub Pages da JSON fayl ──
-  if (bolim) {
+  // ── 1. Attestatsiya bo'limi — VPS API dan olish ──
+  if (bolim && token) {
     try {
-      const baseUrl = window.location.href.split('?')[0].replace(/\/?$/, '/');
-      const jsonUrl = `${baseUrl}bolim_${bolim}.json`;
-      console.log('📥 Fetching:', jsonUrl);
-      const res = await fetch(jsonUrl + '?t=' + Date.now());
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // API URL: bot.py da 8080 portda ishlaydigan server
+      // VPS IP ni Mini App URL dan olamiz (agar kerak bo'lsa static IP ishlatiladi)
+      const apiUrl = `http://170.168.6.220:8080/api/bolim/${bolim}?token=${token}`;
+      console.log('📥 API so\'rovnoma:', apiUrl);
+
+      const res = await fetch(apiUrl);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(`HTTP ${res.status}: ${err.error || 'Noma\'lum xato'}`);
+      }
       const parsed = await res.json();
-      questions = parsed.questions || parsed;
+      questions = parsed.questions || [];
       meta      = parsed.meta || {
         subject: 'attestation', category: 'attestation',
         subcategory: `bolim_${bolim}`, is_attestation: true
       };
-      console.log(`✅ ${questions.length} ta savol yuklandi (bolim_${bolim}.json)`);
+      console.log(`✅ ${questions.length} ta savol yuklandi (API bolim_${bolim})`);
+
+      if (!questions.length) {
+        showError(`❌ ${bolim}-bo'limda hali savollar yo'q.`);
+        showLoader(false);
+        return;
+      }
       initTest();
     } catch (e) {
-      console.error('JSON yuklanmadi:', e);
-      showError(`❌ ${bolim}-bo'lim savollari yuklanmadi. Qaytadan urinib ko'ring.`);
+      console.error('API xato:', e);
+      showError(`❌ ${bolim}-bo'lim savollari yuklanmadi.\n${e.message}`);
     }
     showLoader(false);
     return;
@@ -112,10 +123,11 @@ function showLoader(on) {
 }
 
 function showError(msg) {
-  const el = document.getElementById('question-text') || document.getElementById('qtxt');
-  if (el) el.textContent = msg;
+  showLoader(false);
   document.getElementById('test-screen').style.display   = 'block';
   document.getElementById('result-screen').style.display = 'none';
+  const el = document.getElementById('question-text') || document.getElementById('qtxt');
+  if (el) el.textContent = msg;
 }
 
 // ══════════════════════════════════════════════
@@ -123,9 +135,7 @@ function showError(msg) {
 // ══════════════════════════════════════════════
 function initTest() {
   if (!questions.length) {
-    const el = document.getElementById('question-text') || document.getElementById('qtxt');
-    if (el) el.textContent = '❌ Savollar topilmadi!';
-    showLoader(false);
+    showError('❌ Savollar topilmadi!');
     return;
   }
   answers    = new Array(questions.length).fill(null);
@@ -489,10 +499,7 @@ function showResult() {
   const userEl = document.getElementById('result-user');
   if (userEl) {
     const u = tg?.initDataUnsafe?.user;
-    if (u) {
-      const name = [u.first_name, u.last_name].filter(Boolean).join(' ');
-      userEl.textContent = '👤 ' + name;
-    }
+    if (u) userEl.textContent = '👤 ' + [u.first_name, u.last_name].filter(Boolean).join(' ');
   }
 
   const emojiEl = document.getElementById('result-emoji') || document.getElementById('r-emoji');
@@ -608,7 +615,6 @@ function closeApp() {
   if (tg) tg.close();
 }
 
-// ══════════════════════════════════════════════
 function confirmFinish() {
   const unanswered = answers.filter(a => a === null).length;
   const skipped    = answers.filter(a => a === 'skip').length;

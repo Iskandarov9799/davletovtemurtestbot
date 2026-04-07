@@ -51,31 +51,20 @@ def questions_to_miniapp(questions):
 
 
 def make_test_keyboard(url: str, label: str = "🚀 Testni boshlash") -> InlineKeyboardMarkup:
-    """Mini App testini ochuvchi tugma."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text    = label,
-            web_app = WebAppInfo(url=url)
-        )],
+        [InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))],
     ])
 
 
-async def safe_edit(callback: CallbackQuery, text: str,
-                    reply_markup=None) -> None:
-    """Xavfsiz inline-xabar tahrirlash."""
+async def safe_edit(callback: CallbackQuery, text: str, reply_markup=None) -> None:
     try:
-        await callback.message.edit_text(
-            text,
-            reply_markup = reply_markup,
-            parse_mode   = "HTML"
-        )
+        await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
     except Exception:
         pass
 
 
 async def send_miniapp(callback: CallbackQuery, subject: str,
                        category: str, subcategory: str = None) -> None:
-    """Mini App ga yo'naltiruvchi universal funksiya."""
     tid = callback.from_user.id
 
     access_key = make_access_key(subject, category, subcategory)
@@ -121,14 +110,7 @@ async def send_miniapp(callback: CallbackQuery, subject: str,
     await callback.answer()
 
 
-# ══════════════════════════════════════════════
-
 async def resolve_image_urls(q_list: list, bot) -> list:
-    """
-    file_id → VPS URL ga aylantirish.
-    Agar IMAGES_DIR va IMAGES_URL sozlangan bo'lsa — VPS ga yuklanadi.
-    Aks holda Telegram API URL ishlatiladi (muvaqqat, ~1 soat).
-    """
     result = []
     for q in q_list:
         img = q.get("img", "")
@@ -193,61 +175,38 @@ async def attestation_menu(message: Message):
         parse_mode="HTML"
     )
 
-async def _launch_attestation_bolim(message_or_callback, tid: int,
-                                     bolim_num: int, is_callback: bool = False):
-    """Attestatsiya bo'limini ishga tushirish"""
-    subcategory = f"bolim_{bolim_num}"
-    questions = await get_questions(
-        subject="attestation", category="attestation",
-        subcategory=subcategory,
-        is_attestation=True, count=config.ATTESTATION_COUNT
+async def _launch_attestation_bolim(callback: CallbackQuery, tid: int, bolim_num: int):
+    """Attestatsiya bo'limini VPS API orqali ishga tushirish."""
+    # URL: Mini App VPS API dan savollarni oladi
+    vps_ip  = config.MINI_APP_URL.rstrip('/')
+    # API URL Mini App ga MINI_APP_URL orqali emas, to'g'ridan beriladi
+    # Mini App ochilganda ?bolim=N&token=SECRET parametrlar bilan
+    url = (
+        f"{config.MINI_APP_URL.rstrip('/')}/"
+        f"?bolim={bolim_num}"
+        f"&token={config.API_SECRET}"
     )
-    if not questions:
-        questions = await get_questions(
-            subject="attestation", category="attestation",
-            is_attestation=True, count=config.ATTESTATION_COUNT
-        )
-
-    meta = {
-        "subject":        "attestation",
-        "category":       "attestation",
-        "subcategory":    subcategory,
-        "is_attestation": True,
-        "solution_url":   config.SOLUTION_URL
-    }
-    # Attestatsiya uchun URL — GitHub Pages da bolim_N.json fayl
-    # Savollarni URL ga encode qilmaymiz — juda uzun bo'ladi
-    url = f"{config.MINI_APP_URL.rstrip('/')}/?bolim={bolim_num}"
 
     kb = make_test_keyboard(url, f"🚀 {bolim_num}-bo'lim testini boshlash")
-
     text = (
         f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
-        f"📊 Savollar: <b>{len(questions)} ta</b>\n"
+        f"📊 Savollar: <b>{config.ATTESTATION_COUNT} ta</b>\n"
         f"🔒 Tartib bo'yicha\n\n"
         f"Quyidagi tugmani bosib testni boshlang 👇"
     )
 
-    if is_callback:
-        # edit_text ishlamasa (rasmli xabar bo'lsa) — o'chirib yangi yuborish
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
         try:
-            await message_or_callback.message.edit_text(
-                text, reply_markup=kb, parse_mode="HTML"
-            )
+            await callback.message.delete()
         except Exception:
-            try:
-                await message_or_callback.message.delete()
-            except Exception:
-                pass
-            await message_or_callback.bot.send_message(
-                chat_id    = message_or_callback.from_user.id,
-                text       = text,
-                reply_markup = kb,
-                parse_mode = "HTML"
-            )
-        await message_or_callback.answer()
-    else:
-        await message_or_callback.answer(text, reply_markup=kb, parse_mode="HTML")
+            pass
+        await callback.bot.send_message(
+            chat_id=tid, text=text,
+            reply_markup=kb, parse_mode="HTML"
+        )
+    await callback.answer()
 
 
 @router.message(F.text == "🏅 Milliy sertifikat")
@@ -306,17 +265,11 @@ async def _launch_milliy_msg(message: Message, tid: int):
 
 @router.message(F.text == "🎬 Videodarslar")
 async def videodarslar_menu(message: Message):
-    await message.answer(
-        "🎬 <b>Videodarslar</b>\n\n⏳ Bu bo'lim tez orada ishga tushadi!",
-        parse_mode="HTML"
-    )
+    await message.answer("🎬 <b>Videodarslar</b>\n\n⏳ Bu bo'lim tez orada ishga tushadi!", parse_mode="HTML")
 
 @router.message(F.text == "🎧 Audiolar")
 async def audiolar_menu(message: Message):
-    await message.answer(
-        "🎧 <b>Audiolar</b>\n\n⏳ Bu bo'lim tez orada ishga tushadi!",
-        parse_mode="HTML"
-    )
+    await message.answer("🎧 <b>Audiolar</b>\n\n⏳ Bu bo'lim tez orada ishga tushadi!", parse_mode="HTML")
 
 
 # ══════════════════════════════════════════════
@@ -510,4 +463,4 @@ async def attestation_bolim(callback: CallbackQuery):
         await callback.answer()
         return
 
-    await _launch_attestation_bolim(callback, tid, bolim_num, is_callback=True)
+    await _launch_attestation_bolim(callback, tid, bolim_num)
