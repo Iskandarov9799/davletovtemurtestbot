@@ -179,14 +179,35 @@ async def generate_bolim_json(bolim_num: int) -> bool:
         "questions": questions_to_miniapp(questions)
     }
 
-    # /var/www/bot_pages/ ga yozish — nginx serve qiladi
-    pages_dir = config.BOT_PAGES_DIR
+    pages_dir = os.getenv('GITHUB_PAGES_DIR', '')
+    if not pages_dir:
+        logger.warning("GITHUB_PAGES_DIR .env da yo'q — JSON saqlanmadi")
+        return False
+
     os.makedirs(pages_dir, exist_ok=True)
     fpath = os.path.join(pages_dir, f'bolim_{bolim_num}.json')
     with open(fpath, 'w', encoding='utf-8') as f:
         json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
 
-    logger.info(f"✅ bolim_{bolim_num}.json saqlandi: {fpath} ({len(questions)} savol)")
+    logger.info(f"✅ bolim_{bolim_num}.json saqlandi ({len(questions)} savol)")
+
+    # Git ga commit va push
+    import subprocess
+    repo_dir = pages_dir
+    try:
+        subprocess.run(['git', 'add', f'bolim_{bolim_num}.json'],
+                       cwd=repo_dir, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', f'auto: bolim_{bolim_num}.json yangilandi'],
+                       cwd=repo_dir, capture_output=True)
+        result = subprocess.run(['git', 'push'],
+                                cwd=repo_dir, capture_output=True, text=True)
+        if result.returncode == 0:
+            logger.info(f"✅ bolim_{bolim_num}.json GitHub ga push qilindi")
+        else:
+            logger.warning(f"⚠️ git push xato: {result.stderr}")
+    except Exception as e:
+        logger.error(f"git push xato: {e}")
+
     return True
 
 

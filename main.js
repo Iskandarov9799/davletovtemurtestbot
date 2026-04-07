@@ -28,36 +28,29 @@ const DEMO = [
 async function loadQuestionsFromHash() {
   showLoader(true);
   const params  = new URLSearchParams(window.location.search);
-  const bolim     = params.get('bolim');
-  const pages_url = params.get('pages_url');
-  const hash      = params.get('data') || window.location.hash.slice(1);
+  const bolim   = params.get('bolim');   // attestatsiya: ?bolim=1
+  const subject = params.get('subject'); // boshqa: ?subject=onatili
+  const hash    = params.get('data') || window.location.hash.slice(1);
 
-  // ── 1. Attestatsiya bo'limi — nginx JSON fayldan olish ──
-  if (bolim && pages_url) {
+  // ── 1. Attestatsiya bo'limi — GitHub Pages da JSON fayl ──
+  if (bolim) {
     try {
-      const jsonUrl = `${pages_url}/bolim_${bolim}.json?t=${Date.now()}`;
-      console.log('📥 JSON fetch:', jsonUrl);
-
-      const res = await fetch(jsonUrl);
+      const baseUrl = window.location.href.split('?')[0].replace(/\/?$/, '/');
+      const jsonUrl = `${baseUrl}bolim_${bolim}.json`;
+      console.log('📥 Fetching:', jsonUrl);
+      const res = await fetch(jsonUrl + '?t=' + Date.now());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       const parsed = await res.json();
-      questions = parsed.questions || [];
+      questions = parsed.questions || parsed;
       meta      = parsed.meta || {
         subject: 'attestation', category: 'attestation',
         subcategory: `bolim_${bolim}`, is_attestation: true
       };
       console.log(`✅ ${questions.length} ta savol yuklandi (bolim_${bolim}.json)`);
-
-      if (!questions.length) {
-        showError(`❌ ${bolim}-bo'limda hali savollar yo'q.`);
-        showLoader(false);
-        return;
-      }
       initTest();
     } catch (e) {
-      console.error('Fetch xato:', e);
-      showError(`❌ ${bolim}-bo'lim savollari yuklanmadi.\nServer bilan bog'lanishda xato.`);
+      console.error('JSON yuklanmadi:', e);
+      showError(`❌ ${bolim}-bo'lim savollari yuklanmadi. Qaytadan urinib ko'ring.`);
     }
     showLoader(false);
     return;
@@ -119,11 +112,10 @@ function showLoader(on) {
 }
 
 function showError(msg) {
-  showLoader(false);
-  document.getElementById('test-screen').style.display   = 'block';
-  document.getElementById('result-screen').style.display = 'none';
   const el = document.getElementById('question-text') || document.getElementById('qtxt');
   if (el) el.textContent = msg;
+  document.getElementById('test-screen').style.display   = 'block';
+  document.getElementById('result-screen').style.display = 'none';
 }
 
 // ══════════════════════════════════════════════
@@ -131,7 +123,9 @@ function showError(msg) {
 // ══════════════════════════════════════════════
 function initTest() {
   if (!questions.length) {
-    showError('❌ Savollar topilmadi!');
+    const el = document.getElementById('question-text') || document.getElementById('qtxt');
+    if (el) el.textContent = '❌ Savollar topilmadi!';
+    showLoader(false);
     return;
   }
   answers    = new Array(questions.length).fill(null);
@@ -495,7 +489,10 @@ function showResult() {
   const userEl = document.getElementById('result-user');
   if (userEl) {
     const u = tg?.initDataUnsafe?.user;
-    if (u) userEl.textContent = '👤 ' + [u.first_name, u.last_name].filter(Boolean).join(' ');
+    if (u) {
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+      userEl.textContent = '👤 ' + name;
+    }
   }
 
   const emojiEl = document.getElementById('result-emoji') || document.getElementById('r-emoji');
@@ -611,6 +608,7 @@ function closeApp() {
   if (tg) tg.close();
 }
 
+// ══════════════════════════════════════════════
 function confirmFinish() {
   const unanswered = answers.filter(a => a === null).length;
   const skipped    = answers.filter(a => a === 'skip').length;
