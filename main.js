@@ -28,30 +28,26 @@ const DEMO = [
 async function loadQuestionsFromHash() {
   showLoader(true);
   const params  = new URLSearchParams(window.location.search);
-  const bolim   = params.get('bolim');
-  const token   = params.get('token');
-  const hash    = params.get('data') || window.location.hash.slice(1);
+  const bolim     = params.get('bolim');
+  const pages_url = params.get('pages_url');
+  const hash      = params.get('data') || window.location.hash.slice(1);
 
-  // ── 1. Attestatsiya bo'limi — VPS API dan olish ──
-  if (bolim && token) {
+  // ── 1. Attestatsiya bo'limi — nginx JSON fayldan olish ──
+  if (bolim && pages_url) {
     try {
-      // API URL: bot.py da 8080 portda ishlaydigan server
-      // VPS IP ni Mini App URL dan olamiz (agar kerak bo'lsa static IP ishlatiladi)
-      const apiUrl = `http://170.168.6.220:8080/api/bolim/${bolim}?token=${token}`;
-      console.log('📥 API so\'rovnoma:', apiUrl);
+      const jsonUrl = `${pages_url}/bolim_${bolim}.json?t=${Date.now()}`;
+      console.log('📥 JSON fetch:', jsonUrl);
 
-      const res = await fetch(apiUrl);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(`HTTP ${res.status}: ${err.error || 'Noma\'lum xato'}`);
-      }
+      const res = await fetch(jsonUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const parsed = await res.json();
       questions = parsed.questions || [];
       meta      = parsed.meta || {
         subject: 'attestation', category: 'attestation',
         subcategory: `bolim_${bolim}`, is_attestation: true
       };
-      console.log(`✅ ${questions.length} ta savol yuklandi (API bolim_${bolim})`);
+      console.log(`✅ ${questions.length} ta savol yuklandi (bolim_${bolim}.json)`);
 
       if (!questions.length) {
         showError(`❌ ${bolim}-bo'limda hali savollar yo'q.`);
@@ -60,8 +56,8 @@ async function loadQuestionsFromHash() {
       }
       initTest();
     } catch (e) {
-      console.error('API xato:', e);
-      showError(`❌ ${bolim}-bo'lim savollari yuklanmadi.\n${e.message}`);
+      console.error('Fetch xato:', e);
+      showError(`❌ ${bolim}-bo'lim savollari yuklanmadi.\nServer bilan bog'lanishda xato.`);
     }
     showLoader(false);
     return;

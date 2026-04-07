@@ -177,14 +177,13 @@ async def attestation_menu(message: Message):
 
 async def _launch_attestation_bolim(callback: CallbackQuery, tid: int, bolim_num: int):
     """Attestatsiya bo'limini VPS API orqali ishga tushirish."""
-    # URL: Mini App VPS API dan savollarni oladi
-    vps_ip  = config.MINI_APP_URL.rstrip('/')
-    # API URL Mini App ga MINI_APP_URL orqali emas, to'g'ridan beriladi
-    # Mini App ochilganda ?bolim=N&token=SECRET parametrlar bilan
+    # URL: Mini App nginx orqali JSON fayldan savollarni oladi
+    # http://170.168.6.220/pages/bolim_N.json
+    pages_url = config.BOT_PAGES_URL.rstrip('/')
     url = (
         f"{config.MINI_APP_URL.rstrip('/')}/"
         f"?bolim={bolim_num}"
-        f"&token={config.API_SECRET}"
+        f"&pages_url={pages_url}"
     )
 
     kb = make_test_keyboard(url, f"🚀 {bolim_num}-bo'lim testini boshlash")
