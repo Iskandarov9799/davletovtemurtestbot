@@ -121,14 +121,7 @@ async def send_miniapp(callback: CallbackQuery, subject: str,
     await callback.answer()
 
 
-# ══════════════════════════════════════════════
-
 async def resolve_image_urls(q_list: list, bot) -> list:
-    """
-    file_id → VPS URL ga aylantirish.
-    Agar IMAGES_DIR va IMAGES_URL sozlangan bo'lsa — VPS ga yuklanadi.
-    Aks holda Telegram API URL ishlatiladi (muvaqqat, ~1 soat).
-    """
     result = []
     for q in q_list:
         img = q.get("img", "")
@@ -185,11 +178,15 @@ async def attestation_menu(message: Message):
     if not await is_registered(message.from_user.id):
         await message.answer("❗ Avval ro'yxatdan o'ting — /start")
         return
+    # Dynamic keyboard — har bo'limdagi savol soniga qarab
+    from keyboards.keyboards import attestation_bolimlar_keyboard_dynamic
+    kb = await attestation_bolimlar_keyboard_dynamic()
     await message.answer(
         f"🎓 <b>Atestatsiya</b>\n"
-        f"📋 Har bir bo'lim — <b>{config.PRICE_ATTESTATION:,} so'm</b> (bir martalik)\n\n"
+        f"📋 Har bir bo'lim — <b>{config.PRICE_ATTESTATION:,} so'm</b> (bir martalik)\n"
+        f"⏳ — savollar hali qo'shilmagan\n\n"
         f"Bo'limni tanlang:",
-        reply_markup=attestation_bolimlar_keyboard(),
+        reply_markup=kb,
         parse_mode="HTML"
     )
 
@@ -215,12 +212,9 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
         "is_attestation": True,
         "solution_url":   config.SOLUTION_URL
     }
-    # Attestatsiya uchun URL — GitHub Pages da bolim_N.json fayl
-    # Savollarni URL ga encode qilmaymiz — juda uzun bo'ladi
+    # GitHub Pages da bolim_N.json fayl
     url = f"{config.MINI_APP_URL.rstrip('/')}/?bolim={bolim_num}"
-
-    kb = make_test_keyboard(url, f"🚀 {bolim_num}-bo'lim testini boshlash")
-
+    kb  = make_test_keyboard(url, f"🚀 {bolim_num}-bo'lim testini boshlash")
     text = (
         f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
         f"📊 Savollar: <b>{len(questions)} ta</b>\n"
@@ -229,7 +223,6 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
     )
 
     if is_callback:
-        # edit_text ishlamasa (rasmli xabar bo'lsa) — o'chirib yangi yuborish
         try:
             await message_or_callback.message.edit_text(
                 text, reply_markup=kb, parse_mode="HTML"
@@ -240,10 +233,10 @@ async def _launch_attestation_bolim(message_or_callback, tid: int,
             except Exception:
                 pass
             await message_or_callback.bot.send_message(
-                chat_id    = message_or_callback.from_user.id,
-                text       = text,
+                chat_id      = message_or_callback.from_user.id,
+                text         = text,
                 reply_markup = kb,
-                parse_mode = "HTML"
+                parse_mode   = "HTML"
             )
         await message_or_callback.answer()
     else:
@@ -372,9 +365,19 @@ async def back_adabiyot_boblar(callback: CallbackQuery):
 
 @router.callback_query(F.data == "back:attestation")
 async def back_attestation(callback: CallbackQuery):
-    await safe_edit(callback,
-        "🎓 <b>Atestatsiya</b>\n\nBo'limni tanlang:",
-        reply_markup=attestation_bolimlar_keyboard())
+    from keyboards.keyboards import attestation_bolimlar_keyboard_dynamic
+    kb = await attestation_bolimlar_keyboard_dynamic()
+    try:
+        await callback.message.edit_text(
+            f"🎓 <b>Atestatsiya</b>\n"
+            f"📋 Har bir bo'lim — <b>{config.PRICE_ATTESTATION:,} so'm</b> (bir martalik)\n"
+            f"⏳ — savollar hali qo'shilmagan\n\n"
+            f"Bo'limni tanlang:",
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -474,8 +477,37 @@ async def adabiyot_grade_aralash(callback: CallbackQuery):
 async def attestation_bolim(callback: CallbackQuery):
     bolim_num = int(callback.data.split(":")[2])
     tid       = callback.from_user.id
-
     bolim_key = f"bolim_{bolim_num}"
+
+    # 1. Bu bo'limda savol borligini tekshirish
+    savol_soni = await count_questions(
+        subject='attestation', category='attestation',
+        subcategory=bolim_key, is_attestation=True
+    )
+    if savol_soni == 0:
+        kb_empty = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back:attestation")],
+        ])
+        empty_text = (
+            f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
+            f"⏳ <b>Bu bo'lim hali tayyorlanmoqda.</b>\n\n"
+            f"Savollar qo'shilgandan so'ng to'lov qilishingiz mumkin."
+        )
+        try:
+            await callback.message.edit_text(
+                empty_text, reply_markup=kb_empty, parse_mode="HTML"
+            )
+        except Exception:
+            try: await callback.message.delete()
+            except Exception: pass
+            await callback.bot.send_message(
+                chat_id=tid, text=empty_text,
+                reply_markup=kb_empty, parse_mode="HTML"
+            )
+        await callback.answer()
+        return
+
+    # 2. Savol bor — sotib olganmi tekshirish
     kb_buy = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"💳 Sotib olish — {config.PRICE_ATTESTATION:,} so'm",
@@ -488,7 +520,7 @@ async def attestation_bolim(callback: CallbackQuery):
     ])
     buy_text = (
         f"🎓 <b>Atestatsiya — {bolim_num}-bo'lim</b>\n\n"
-        f"📋 35 ta savol | Bir martalik to'lov\n"
+        f"📋 {savol_soni} ta savol | Bir martalik to'lov\n"
         f"💰 Narxi: <b>{config.PRICE_ATTESTATION:,} so'm</b>\n\n"
         f"To'lov qilganingizdan so'ng faqat <b>{bolim_num}-bo'lim</b> ochiladi."
     )
@@ -499,10 +531,8 @@ async def attestation_bolim(callback: CallbackQuery):
                 buy_text, reply_markup=kb_buy, parse_mode="HTML"
             )
         except Exception:
-            try:
-                await callback.message.delete()
-            except Exception:
-                pass
+            try: await callback.message.delete()
+            except Exception: pass
             await callback.bot.send_message(
                 chat_id=tid, text=buy_text,
                 reply_markup=kb_buy, parse_mode="HTML"

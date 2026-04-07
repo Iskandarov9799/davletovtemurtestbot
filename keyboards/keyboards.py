@@ -46,7 +46,6 @@ def admin_keyboard():
             [KeyboardButton(text="🗂 Bo'lim o'chirish"),   KeyboardButton(text="➕ Bo'lim qo'shish")],
             [KeyboardButton(text="🗑 Savollarni o'chirish"),   KeyboardButton(text="🔗 Yechim linki")],
             [KeyboardButton(text="♻️ Tariflarni nollash")],
-            [KeyboardButton(text="🔄 JSON yangilash")],
             [KeyboardButton(text="🔙 Orqaga")],
         ],
         resize_keyboard=True
@@ -66,7 +65,6 @@ def skip_image_keyboard():
 # ══════════════════════════════════════════════
 
 def onatili_category_keyboard():
-    """Atestatsiya YO'Q — asosiy menyuda alohida turibdi"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📌 Mavzulashtirilgan",  callback_data="onatili:mavzu")],
         [InlineKeyboardButton(text="🔀 Mavzulardan aralash", callback_data="onatili:aralash")],
@@ -100,7 +98,6 @@ def onatili_topics_keyboard():
 # ══════════════════════════════════════════════
 
 def adabiyot_category_keyboard():
-    """Atestatsiya YO'Q — asosiy menyuda alohida turibdi"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🏫 Sinflar bo'yicha",  callback_data="adabiyot:sinf")],
         [InlineKeyboardButton(text="🔀 Aralash",           callback_data="adabiyot:aralash")],
@@ -139,7 +136,6 @@ def adabiyot_boblar_keyboard(grade: str):
 # ══════════════════════════════════════════════
 
 def attestation_buy_standalone_keyboard():
-    from config import config
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"💳 Sotib olish — {config.PRICE_ATTESTATION:,} so'm",
@@ -149,7 +145,6 @@ def attestation_buy_standalone_keyboard():
     ])
 
 def milliy_buy_keyboard():
-    from config import config
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"💳 Sotib olish — {config.PRICE_ATTESTATION:,} so'm",
@@ -175,11 +170,59 @@ def attestation_format_keyboard(subject: str):
     ])
 
 # ══════════════════════════════════════════════
+# ATTESTATSIYA — 10 TA BO'LIM
+# ══════════════════════════════════════════════
+
+def attestation_bolimlar_keyboard():
+    """Attestatsiya 10 ta bo'lim — statik (back:attestation uchun)"""
+    buttons = []
+    row = []
+    for i in range(1, 11):
+        row.append(InlineKeyboardButton(
+            text=f"📋 {i}-bo'lim",
+            callback_data=f"attest:bolim:{i}"
+        ))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="back:main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+async def attestation_bolimlar_keyboard_dynamic() -> InlineKeyboardMarkup:
+    """Har bo'limda savol borligini DB dan tekshirib keyboard yaratadi.
+    📋 — savol bor, ⏳ — hali qo'shilmagan."""
+    from database.db import count_questions
+    buttons = []
+    row = []
+    for i in range(1, 11):
+        cnt = await count_questions(
+            subject='attestation',
+            category='attestation',
+            subcategory=f'bolim_{i}',
+            is_attestation=True
+        )
+        text = f"📋 {i}-bo'lim" if cnt > 0 else f"⏳ {i}-bo'lim"
+        row.append(InlineKeyboardButton(
+            text=text,
+            callback_data=f"attest:bolim:{i}"
+        ))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="back:main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# ══════════════════════════════════════════════
 # TO'LOV
 # ══════════════════════════════════════════════
 
 def payment_options_keyboard(access_key: str):
-    """Kunlik va oylik tariflar — bir martalik YO'Q (faqat attestatsiyada)"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"📅 Kunlik — {config.PRICE_DAILY:,} so'm (24 soat)",
@@ -215,7 +258,6 @@ def miniapp_keyboard(url: str):
 # ══════════════════════════════════════════════
 
 def subject_keyboard():
-    """Fan tanlash — admin savol qo'shganda"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📚 Ona tili",          callback_data="addq:subject:onatili")],
         [InlineKeyboardButton(text="📖 Adabiyot",          callback_data="addq:subject:adabiyot")],
@@ -225,7 +267,6 @@ def subject_keyboard():
     ])
 
 def addq_category_keyboard(subject: str):
-    """Kategoriya tanlash — fanga qarab"""
     if subject == 'onatili':
         buttons = [
             [InlineKeyboardButton(text="📌 Mavzulashtirilgan", callback_data="addq:cat:mavzu")],
@@ -240,7 +281,6 @@ def addq_category_keyboard(subject: str):
             [InlineKeyboardButton(text="📖 Badiiy parchalar",  callback_data="addq:cat:badiiy")],
         ]
     elif subject == 'attestation':
-        # Attestatsiya — avval bo'lim, keyin savol turi
         buttons = []
         row = []
         for i in range(1, 11):
@@ -251,9 +291,10 @@ def addq_category_keyboard(subject: str):
             if len(row) == 2:
                 buttons.append(row); row = []
         if row: buttons.append(row)
-        buttons.append([InlineKeyboardButton(text="🔘 Barcha bo'limlar (umumiy)", callback_data="addq:attest_bolim:0")])
+        buttons.append([InlineKeyboardButton(
+            text="🔘 Barcha bo'limlar (umumiy)", callback_data="addq:attest_bolim:0"
+        )])
     elif subject == 'milliy':
-        # Milliy sertifikat — variantli yoki yozma
         buttons = [
             [InlineKeyboardButton(text="🔘 Variantli (1-35)",      callback_data="addq:qtype:choice")],
             [InlineKeyboardButton(text="✏️ Yozma 1 qism (36-38)", callback_data="addq:qtype:written1")],
@@ -298,7 +339,6 @@ def addq_bob_keyboard(grade: str):
     buttons.append([InlineKeyboardButton(text="❌ Bekor", callback_data="addq:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
 def correct_answer_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="A", callback_data="addq:correct:A"),
@@ -306,23 +346,3 @@ def correct_answer_keyboard():
         InlineKeyboardButton(text="C", callback_data="addq:correct:C"),
         InlineKeyboardButton(text="D", callback_data="addq:correct:D"),
     ]])
-# ══════════════════════════════════════════════
-# ATTESTATSIYA — 10 TA BO'LIM
-# ══════════════════════════════════════════════
-
-def attestation_bolimlar_keyboard():
-    """Attestatsiya 10 ta bo'lim"""
-    buttons = []
-    row = []
-    for i in range(1, 11):
-        row.append(InlineKeyboardButton(
-            text=f"📋 {i}-bo'lim",
-            callback_data=f"attest:bolim:{i}"
-        ))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="back:main")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
