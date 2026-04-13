@@ -26,7 +26,7 @@ class Config:
 
     PRICE_MILLIY:     int = field(default_factory=lambda: int(os.getenv('PRICE_MILLIY', '50000')))
     PRICE_DAILY:       int = 10_000   # Kunlik — 10,000 so'm
-    PRICE_MONTHLY:     int = 100_000  # Oylik — 100,000 so'm
+    PRICE_MONTHLY:     int = 50_000  # Oylik — 50,000 so'm
     PRICE_ATTESTATION: int = 5_000    # Attestatsiya — bir martalik 5,000 so'm
     MIN_QUESTIONS:     int = 35
     MAX_QUESTIONS:     int = 50
